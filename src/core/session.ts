@@ -62,7 +62,7 @@ export const readRestartSignal = (): RestartSignal | null => {
 export const spawnTransparent = (opts: SessionOptions): Promise<number> => {
   const args = buildArgs(opts);
 
-  const proc = spawn("claude", args, {
+  const proc = spawn(opts.config.backend, args, {
     stdio: "inherit",
     env: { ...process.env },
   });

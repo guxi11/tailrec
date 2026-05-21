@@ -1,8 +1,7 @@
 // Config type definitions
 
 export interface DeckhandConfig {
-  backend: "claude" | "codex" | "custom";
-  backend_command?: string; // for custom backend
+  backend: string;
   model: string;
   collector_model: string;
   cards_dir: string;
