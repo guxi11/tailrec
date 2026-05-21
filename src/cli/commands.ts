@@ -4,11 +4,10 @@ import { Command } from "commander";
 import { loadConfig } from "../config/index.js";
 import { loadWorkspace, buildGraph, createCard, openInEditor } from "../cards/index.js";
 import { readDecisions, readCompleted } from "../state/index.js";
-import { formatUsageSummary, initSessionUsage } from "../core/usage.js";
+import { initSessionUsage, startAiSession, persistUsage, formatExitSummary } from "../core/usage.js";
 import { startSession } from "./repl.js";
 import { configCommand } from "./config-cmd.js";
-import { readFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { stringify as stringifyYaml } from "yaml";
 
 export const createProgram = (): Command => {
@@ -78,7 +77,8 @@ export const createProgram = (): Command => {
       const sessionUsage = initSessionUsage();
       const { reassemble } = await import("../core/reassemble.js");
       const { spawnTransparent } = await import("../core/session.js");
-      const { persistUsage } = await import("../core/usage.js");
+
+      startAiSession(sessionUsage, task);
 
       const result = await reassemble(
         { next_input: task },
@@ -92,6 +92,8 @@ export const createProgram = (): Command => {
         appendPrompt: result.prompt.appendix,
       });
 
+      const summary = formatExitSummary(sessionUsage);
+      if (summary) process.stderr.write(summary + "\n");
       persistUsage(config.state_dir, sessionUsage);
       process.exit(exitCode);
     });
@@ -122,26 +124,6 @@ export const createProgram = (): Command => {
         }
       } else {
         console.log("No completed tasks.");
-      }
-      console.log();
-    });
-
-  // deckhand usage
-  program
-    .command("usage")
-    .description("Show session token/cost breakdown")
-    .action(() => {
-      const config = loadConfig();
-      const usagePath = join(config.state_dir, "usage.json");
-      if (!existsSync(usagePath)) {
-        console.log("No usage data recorded yet.");
-        return;
-      }
-      const sessions = JSON.parse(readFileSync(usagePath, "utf-8"));
-      const latest = sessions[sessions.length - 1];
-      if (latest) {
-        console.log(`\n Last session (${latest.sessionStart}):\n`);
-        console.log(formatUsageSummary(latest));
       }
       console.log();
     });

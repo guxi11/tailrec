@@ -11,6 +11,7 @@ export interface SessionOptions {
   config: DeckhandConfig;
   appendPrompt: string;
   resume?: boolean;
+  initialPrompt?: string;
 }
 
 export interface RestartSignal {
@@ -90,6 +91,10 @@ const buildArgs = (opts: SessionOptions): string[] => {
 
   if (opts.resume) {
     args.push("--resume");
+  }
+
+  if (opts.initialPrompt) {
+    args.push(opts.initialPrompt);
   }
 
   return args;

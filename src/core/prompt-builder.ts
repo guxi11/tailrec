@@ -12,12 +12,13 @@ export const buildPrompt = (args: {
   selectedCards: Card[];
   decisions: Decisions;
   specName?: string;
+  initialTask?: string;
 }): AssembledPrompt => {
-  const { sharedCards, selectedCards, decisions, specName } = args;
+  const { sharedCards, selectedCards, decisions, specName, initialTask } = args;
 
   const sections: string[] = [];
 
-  // Shared cards (always included)
+  // Layer 1: Shared cards (always included)
   if (sharedCards.length > 0) {
     sections.push(
       "# Shared Context\n" +
@@ -25,7 +26,7 @@ export const buildPrompt = (args: {
     );
   }
 
-  // Collector-selected task cards
+  // Layer 2: Collector-selected task cards
   if (selectedCards.length > 0) {
     sections.push(
       "# Task Context\n" +
@@ -33,12 +34,17 @@ export const buildPrompt = (args: {
     );
   }
 
-  // Persisted decisions
+  // Layer 3: Persisted decisions
   const hasDecisions = Object.keys(decisions).length > 0;
   if (hasDecisions) {
     sections.push(
       `# Decisions${specName ? ` (${specName})` : ""}\n\`\`\`json\n${JSON.stringify(decisions, null, 2)}\n\`\`\``,
     );
+  }
+
+  // Layer 4: Initial task / user message
+  if (initialTask) {
+    sections.push(`# Current Task\n${initialTask}`);
   }
 
   return { appendix: sections.join("\n\n---\n") };

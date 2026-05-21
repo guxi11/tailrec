@@ -3,20 +3,22 @@
 import type { DeckhandConfig } from "../config/index.js";
 import { reassemble } from "../core/reassemble.js";
 import { spawnTransparent, readRestartSignal } from "../core/session.js";
-import { initSessionUsage, persistUsage } from "../core/usage.js";
+import { initSessionUsage, startAiSession, persistUsage, formatExitSummary } from "../core/usage.js";
 
 export const startSession = async (
   config: DeckhandConfig,
-  opts?: { spec?: string; resume?: boolean },
+  opts?: { spec?: string; resume?: boolean; task?: string },
 ): Promise<void> => {
   const specName = opts?.spec ?? "default";
   const sessionUsage = initSessionUsage();
 
-  let query = "general session";
+  let query = opts?.task ?? "";
   let resume = opts?.resume;
 
   // Restart loop — respawn claude when MCP signals restart
   while (true) {
+    startAiSession(sessionUsage, query);
+
     const result = await reassemble(
       { next_input: query },
       config,
@@ -28,6 +30,7 @@ export const startSession = async (
       config,
       appendPrompt: result.prompt.appendix,
       resume,
+      initialPrompt: query,
     });
 
     // Check for restart signal from MCP
@@ -38,7 +41,9 @@ export const startSession = async (
       continue;
     }
 
-    // Normal exit
+    // Normal exit — show usage then persist
+    const summary = formatExitSummary(sessionUsage);
+    if (summary) process.stderr.write(summary + "\n");
     persistUsage(config.state_dir, sessionUsage);
     process.exit(exitCode);
   }

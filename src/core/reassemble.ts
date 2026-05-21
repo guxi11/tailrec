@@ -66,6 +66,7 @@ export const reassemble = async (
     selectedCards,
     decisions,
     specName,
+    initialTask: input.next_input,
   });
 
   return { prompt, collectorUsage: collectorResult.usage };

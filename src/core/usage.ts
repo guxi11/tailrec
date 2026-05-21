@@ -5,8 +5,15 @@ import { join, dirname } from "node:path";
 import type { UsageEntry } from "../utils/cost.js";
 import { calcCost, totalCost, formatCost } from "../utils/cost.js";
 
+export interface AiSession {
+  query: string;
+  entries: UsageEntry[];
+  startedAt: string;
+}
+
 export interface SessionUsage {
   entries: UsageEntry[];
+  sessions: AiSession[];
   sessionStart: string;
 }
 
@@ -14,11 +21,19 @@ const usagePath = (stateDir: string): string => join(stateDir, "usage.json");
 
 export const initSessionUsage = (): SessionUsage => ({
   entries: [],
+  sessions: [],
   sessionStart: new Date().toISOString(),
 });
 
+export const startAiSession = (usage: SessionUsage, query: string): void => {
+  usage.sessions.push({ query, entries: [], startedAt: new Date().toISOString() });
+};
+
 export const recordUsage = (session: SessionUsage, entry: UsageEntry): void => {
   session.entries.push(entry);
+  // Also record into current AI session if one is active
+  const current = session.sessions[session.sessions.length - 1];
+  if (current) current.entries.push(entry);
 };
 
 export const persistUsage = (stateDir: string, session: SessionUsage): void => {
@@ -51,6 +66,26 @@ export const formatUsageSummary = (session: SessionUsage): string => {
     `Cache write: ${totalCacheWrite.toLocaleString()} tokens`,
     `Total cost: ${formatCost(cost)}`,
   ].join("\n");
+};
+
+export const formatExitSummary = (session: SessionUsage): string => {
+  const { sessions } = session;
+  if (sessions.length === 0) return "";
+
+  const lines: string[] = [
+    `\n\x1b[2m─── deckhand session: ${sessions.length} AI session${sessions.length > 1 ? "s" : ""} ───\x1b[0m`,
+  ];
+
+  sessions.forEach((s, i) => {
+    const cost = totalCost(s.entries);
+    const tokens = s.entries.reduce((sum, e) => sum + e.input_tokens + e.output_tokens, 0);
+    lines.push(`\x1b[2m  #${i + 1} ${s.query.slice(0, 50)}${s.query.length > 50 ? "…" : ""} — ${tokens.toLocaleString()} tok, ${formatCost(cost)}\x1b[0m`);
+  });
+
+  const total = totalCost(session.entries);
+  lines.push(`\x1b[2m  Total collector cost: ${formatCost(total)}\x1b[0m`);
+
+  return lines.join("\n");
 };
 
 export { calcCost, totalCost, formatCost };
