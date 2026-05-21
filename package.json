@@ -1,0 +1,31 @@
+{
+  "name": "deckhand",
+  "version": "0.1.0",
+  "description": "Transparent LLM session wrapper with card-based context assembly",
+  "type": "module",
+  "bin": {
+    "deckhand": "./dist/index.js"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src/"
+  },
+  "keywords": ["cli", "llm", "context-management", "cards"],
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.39.0",
+    "commander": "^13.0.0",
+    "yaml": "^2.7.0",
+    "chalk": "^5.4.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsup": "^8.3.0",
+    "typescript": "^5.7.0"
+  }
+}

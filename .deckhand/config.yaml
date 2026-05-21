@@ -1,0 +1,3 @@
+backend: claude-internal
+cards_dir: .deckhand/cards
+state_dir: .deckhand/state
