@@ -1,18 +1,66 @@
 // MCP server — exposes reassemble tool to Claude Code via stdio JSON-RPC
 
 import { createInterface } from "node:readline";
+import { writeFileSync } from "node:fs";
 import { loadConfig } from "./config/index.js";
-import { loadWorkspace, sharedCards, taskCards } from "./cards/index.js";
-import { collect } from "./collector/index.js";
-import { mergeDecisions, readDecisions } from "./state/index.js";
+import { mergeDecisions } from "./state/index.js";
 
 const config = loadConfig();
+const SIGNAL_PATH = process.env.DECKHAND_SIGNAL_PATH!;
 
 const send = (msg: Record<string, unknown>) => {
   process.stdout.write(JSON.stringify(msg) + "\n");
 };
 
-const handleRequest = async (req: { id: number | string; method: string; params?: Record<string, unknown> }) => {
+const TOOLS = [
+  {
+    name: "reassemble",
+    description:
+      "Clear context and reload with fresh card selection. Call when: context is stale, you need different domain knowledge, or pivoting to a new task. Persists decisions before restarting.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        next_input: {
+          type: "string",
+          description: "The task/focus for the new session",
+        },
+        decisions: {
+          type: "object",
+          description: "Key-value pairs to persist across sessions (e.g. {\"auth_method\": \"jwt\"})",
+          additionalProperties: true,
+        },
+        context_hints: {
+          type: "array",
+          items: { type: "string" },
+          description: "Hints for card selection (e.g. [\"needs database schema\", \"auth flow\"])",
+        },
+      },
+      required: ["next_input"],
+    },
+  },
+];
+
+const handleReassemble = (args: { next_input: string; decisions?: Record<string, unknown>; context_hints?: string[] }) => {
+  // Persist decisions before restart
+  if (args.decisions) {
+    mergeDecisions(config.state_dir, "default", args.decisions);
+  }
+
+  // Write signal for deckhand parent
+  writeFileSync(SIGNAL_PATH, JSON.stringify({
+    action: "restart",
+    query: args.next_input,
+    contextHints: args.context_hints,
+    decisions: args.decisions,
+  }));
+
+  // Kill claude — deckhand will respawn with fresh cards
+  setTimeout(() => process.kill(process.ppid!, "SIGTERM"), 100);
+
+  return "Reassembling — restarting with fresh context...";
+};
+
+const handleRequest = async (req: { id?: number | string; method: string; params?: Record<string, unknown> }) => {
   switch (req.method) {
     case "initialize":
       return send({
@@ -26,94 +74,21 @@ const handleRequest = async (req: { id: number | string; method: string; params?
       });
 
     case "notifications/initialized":
-      return; // no response needed
+      return;
 
     case "tools/list":
-      return send({
-        jsonrpc: "2.0",
-        id: req.id,
-        result: {
-          tools: [
-            {
-              name: "reassemble",
-              description:
-                "Load relevant knowledge cards into context. Call this when you need domain-specific context (architecture decisions, patterns, schemas) that isn't currently available. The collector selects the most relevant cards based on your query.",
-              inputSchema: {
-                type: "object",
-                properties: {
-                  query: {
-                    type: "string",
-                    description: "What context you need (e.g. 'database schema', 'auth patterns', 'API routing')",
-                  },
-                  decisions: {
-                    type: "object",
-                    description: "Key-value pairs to persist across sessions (e.g. {\"auth_method\": \"jwt\"})",
-                    additionalProperties: true,
-                  },
-                  spec: {
-                    type: "string",
-                    description: "Spec/workspace name for state isolation (default: 'default')",
-                  },
-                },
-                required: ["query"],
-              },
-            },
-          ],
-        },
-      });
+      return send({ jsonrpc: "2.0", id: req.id, result: { tools: TOOLS } });
 
     case "tools/call": {
       const params = req.params as { name: string; arguments?: Record<string, unknown> };
-      if (params.name !== "reassemble") {
-        return send({
-          jsonrpc: "2.0",
-          id: req.id,
-          result: { content: [{ type: "text", text: `Unknown tool: ${params.name}` }], isError: true },
-        });
+      const args = (params.arguments ?? {}) as Record<string, unknown>;
+
+      let text: string;
+      if (params.name === "reassemble") {
+        text = handleReassemble(args as Parameters<typeof handleReassemble>[0]);
+      } else {
+        text = `Unknown tool: ${params.name}`;
       }
-
-      const args = params.arguments as { query: string; decisions?: Record<string, unknown>; spec?: string } | undefined;
-      const query = args?.query ?? "general";
-      const specName = args?.spec ?? "default";
-
-      // Persist decisions
-      if (args?.decisions) {
-        mergeDecisions(config.state_dir, specName, args.decisions);
-      }
-
-      // Load and select cards
-      const allCards = loadWorkspace(config.cards_dir);
-      const task = taskCards(allCards);
-      const shared = sharedCards(allCards);
-
-      const collectorResult = await collect({
-        nextInput: query,
-        cards: task,
-        model: config.collector_model,
-      });
-
-      const selectedCards = collectorResult.selectedCards
-        .map((name) => task.find((c) => c.name === name))
-        .filter((c): c is NonNullable<typeof c> => c != null);
-
-      // Build response with card contents
-      const sections: string[] = [];
-
-      if (shared.length > 0) {
-        sections.push(shared.map((c) => `## ${c.name}\n${c.body}`).join("\n\n"));
-      }
-      if (selectedCards.length > 0) {
-        sections.push(selectedCards.map((c) => `## ${c.name}\n${c.body}`).join("\n\n"));
-      }
-
-      const decisions = readDecisions(config.state_dir, specName);
-      if (Object.keys(decisions).length > 0) {
-        sections.push(`## Decisions\n\`\`\`json\n${JSON.stringify(decisions, null, 2)}\n\`\`\``);
-      }
-
-      const text = sections.length > 0
-        ? sections.join("\n\n---\n")
-        : "No relevant cards found.";
 
       return send({
         jsonrpc: "2.0",
@@ -123,21 +98,20 @@ const handleRequest = async (req: { id: number | string; method: string; params?
     }
 
     default:
-      return send({
-        jsonrpc: "2.0",
-        id: req.id,
-        error: { code: -32601, message: `Method not found: ${req.method}` },
-      });
+      if (req.id != null) {
+        send({ jsonrpc: "2.0", id: req.id, error: { code: -32601, message: `Method not found: ${req.method}` } });
+      }
   }
 };
 
-// stdio JSON-RPC loop
 const rl = createInterface({ input: process.stdin });
 rl.on("line", (line) => {
   try {
     const msg = JSON.parse(line);
     handleRequest(msg).catch((err) => {
-      send({ jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: String(err) } });
+      if (msg.id != null) {
+        send({ jsonrpc: "2.0", id: msg.id, error: { code: -32603, message: String(err) } });
+      }
     });
-  } catch { /* malformed JSON, ignore */ }
+  } catch { /* malformed */ }
 });

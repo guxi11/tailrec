@@ -4,7 +4,8 @@
   "description": "Transparent LLM session wrapper with card-based context assembly",
   "type": "module",
   "bin": {
-    "deckhand": "./dist/index.js"
+    "deckhand": "./dist/index.js",
+    "deckhand-mcp": "./dist/mcp.js"
   },
   "scripts": {
     "build": "tsup",
