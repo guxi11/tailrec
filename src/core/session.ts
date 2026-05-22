@@ -84,13 +84,12 @@ const cleanToRawIdx = (raw: string, cleanEnd: number): number => {
 };
 
 // Spawn backend inside `script` (allocates a pty so it stays interactive)
-// Strips all output before the echoed initialPrompt line.
+// - Suppresses output once signal file appears (restart imminent)
+// - Strips new session header up to echoed initialPrompt line
 export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => {
   const sessionId = opts.resume ? undefined : (opts.sessionId ?? randomUUID());
   const args = buildArgs(opts, sessionId);
 
-  // macOS: script -q /dev/null cmd ...args
-  // Linux: script -qc "cmd args" /dev/null
   const isMac = process.platform === "darwin";
   const scriptArgs = isMac
     ? ["-q", "/dev/null", opts.backend, ...args]
@@ -101,17 +100,25 @@ export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => 
     env: { ...process.env },
   });
 
-  // If no initialPrompt, pass through everything (interactive start)
+  // Once signal file exists, MCP has requested restart — suppress all further output
+  let muted = false;
+  const isMuted = (): boolean => {
+    if (muted) return true;
+    if (existsSync(SIGNAL_PATH)) { muted = true; return true; }
+    return false;
+  };
+
+  // No initialPrompt → passthrough with mute check
   if (!opts.initialPrompt) {
-    proc.stdout!.on("data", (chunk: Buffer) => process.stdout.write(chunk));
-    proc.stderr!.on("data", (chunk: Buffer) => process.stderr.write(chunk));
+    proc.stdout!.on("data", (chunk: Buffer) => { if (!isMuted()) process.stdout.write(chunk); });
+    proc.stderr!.on("data", (chunk: Buffer) => { if (!isMuted()) process.stderr.write(chunk); });
     return new Promise((resolve, reject) => {
       proc.on("error", reject);
       proc.on("exit", (code) => resolve({ exitCode: code ?? 0, sessionId }));
     });
   }
 
-  // Strip header: everything before the line containing initialPrompt
+  // Has initialPrompt → strip header (everything before echoed prompt line)
   const prompt = opts.initialPrompt;
   let headerDone = false;
   let headerBuf = "";
@@ -126,13 +133,13 @@ export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => 
   const headerTimer = setTimeout(flushHeader, HEADER_TIMEOUT_MS);
 
   proc.stdout!.on("data", (chunk: Buffer) => {
+    if (isMuted()) return;
     if (headerDone) {
       process.stdout.write(chunk);
       return;
     }
     headerBuf += chunk.toString();
     const clean = stripAnsi(headerBuf);
-    // Find the echoed prompt line (❯ <prompt>) and cut after it
     const promptIdx = clean.indexOf(prompt);
     if (promptIdx !== -1) {
       clearTimeout(headerTimer);
@@ -146,14 +153,13 @@ export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => 
     }
   });
 
-  // stderr from script (if any) goes to our stderr
-  proc.stderr!.on("data", (chunk: Buffer) => process.stderr.write(chunk));
+  proc.stderr!.on("data", (chunk: Buffer) => { if (!isMuted()) process.stderr.write(chunk); });
 
   return new Promise((resolve, reject) => {
     proc.on("error", reject);
     proc.on("exit", (code) => {
       clearTimeout(headerTimer);
-      flushHeader();
+      if (!muted) flushHeader();
       resolve({ exitCode: code ?? 0, sessionId });
     });
   });
