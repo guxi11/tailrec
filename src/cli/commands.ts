@@ -14,7 +14,7 @@ export const createProgram = (): Command => {
   const program = new Command();
 
   program
-    .name("deckhand")
+    .name("tailrec")
     .description("Transparent Claude Code wrapper with card-based context injection")
     .version("0.1.0")
     .option("--spec <name>", "Spec name for state", "default")
@@ -24,10 +24,10 @@ export const createProgram = (): Command => {
       await startSession(config, opts);
     });
 
-  // deckhand config
+  // tailrec config
   program.addCommand(configCommand());
 
-  // deckhand spec <name>
+  // tailrec spec <name>
   program
     .command("spec <name>")
     .description("Create or edit a card")
@@ -37,7 +37,7 @@ export const createProgram = (): Command => {
       openInEditor(path);
     });
 
-  // deckhand cards
+  // tailrec cards
   program
     .command("cards")
     .description("List all cards and show link graph")
@@ -67,7 +67,7 @@ export const createProgram = (): Command => {
       console.log();
     });
 
-  // deckhand run <task> — non-interactive, single prompt
+  // tailrec run <task> — non-interactive, single prompt
   program
     .command("run <task>")
     .description("Run a task non-interactively (pipe mode)")
@@ -87,7 +87,7 @@ export const createProgram = (): Command => {
         sessionUsage,
       );
 
-      const exitCode = await spawnTransparent({
+      const { exitCode } = await spawnTransparent({
         config,
         appendPrompt: result.prompt.appendix,
       });
@@ -98,7 +98,7 @@ export const createProgram = (): Command => {
       process.exit(exitCode);
     });
 
-  // deckhand status
+  // tailrec status
   program
     .command("status")
     .description("Show current state (decisions, completed tasks)")
@@ -128,20 +128,20 @@ export const createProgram = (): Command => {
       console.log();
     });
 
-  // deckhand init
+  // tailrec init
   program
     .command("init")
-    .description("Scaffold .deckhand/ in current project")
+    .description("Scaffold .tailrec/ in current project")
     .action(() => {
-      const dirs = [".deckhand", ".deckhand/cards", ".deckhand/state"];
+      const dirs = [".tailrec", ".tailrec/cards", ".tailrec/state"];
       for (const dir of dirs) {
         if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
       }
-      const configPath = ".deckhand/config.yaml";
+      const configPath = ".tailrec/config.yaml";
       if (!existsSync(configPath)) {
-        writeFileSync(configPath, stringifyYaml({ backend: "claude", cards_dir: ".deckhand/cards" }));
+        writeFileSync(configPath, stringifyYaml({ backend: "claude", cards_dir: ".tailrec/cards" }));
       }
-      console.log("Initialized .deckhand/ structure.");
+      console.log("Initialized .tailrec/ structure.");
     });
 
   return program;

@@ -1,0 +1,11 @@
+node_modules/
+src/
+archive/
+.claude/
+.tailrec/
+templates/
+specs.md
+tsconfig.json
+tsup.config.ts
+*.tsbuildinfo
+CLAUDE.md

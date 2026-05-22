@@ -1,17 +1,24 @@
 // Session manager — transparent TTY passthrough with restart loop
 
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { writeFileSync, readFileSync, mkdirSync, existsSync, unlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
-import type { DeckhandConfig } from "../config/index.js";
+import type { TailrecConfig } from "../config/index.js";
 
 export interface SessionOptions {
-  config: DeckhandConfig;
+  config: TailrecConfig;
   appendPrompt: string;
   resume?: boolean;
   initialPrompt?: string;
+  sessionId?: string;
+}
+
+export interface SpawnResult {
+  exitCode: number;
+  sessionId: string | undefined;
 }
 
 export interface RestartSignal {
@@ -21,7 +28,7 @@ export interface RestartSignal {
   contextHints?: string[];
 }
 
-const SIGNAL_DIR = join(tmpdir(), "deckhand");
+const SIGNAL_DIR = join(tmpdir(), "tailrec");
 const SIGNAL_PATH = join(SIGNAL_DIR, "signal.json");
 
 const getMcpBin = (): string => {
@@ -37,10 +44,10 @@ const writeMcpConfig = (): string => {
 
   writeFileSync(configPath, JSON.stringify({
     mcpServers: {
-      deckhand: {
+      tailrec: {
         command: "node",
         args: [mcpBin],
-        env: { DECKHAND_SIGNAL_PATH: SIGNAL_PATH },
+        env: { TAILREC_SIGNAL_PATH: SIGNAL_PATH },
       },
     },
   }));
@@ -59,9 +66,20 @@ export const readRestartSignal = (): RestartSignal | null => {
   }
 };
 
+// Clear claude's startup header by restoring pre-spawn cursor position
+const clearHeader = (delayMs = 300): void => {
+  process.stdout.write("\x1B7"); // save cursor before header
+  setTimeout(() => {
+    process.stdout.write("\x1B8\x1B[J"); // restore cursor + clear below
+  }, delayMs);
+};
+
 // Spawn claude with full TTY inheritance
-export const spawnTransparent = (opts: SessionOptions): Promise<number> => {
-  const args = buildArgs(opts);
+export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => {
+  const sessionId = opts.resume ? undefined : (opts.sessionId ?? randomUUID());
+  const args = buildArgs(opts, sessionId);
+
+  clearHeader();
 
   const proc = spawn(opts.config.backend, args, {
     stdio: "inherit",
@@ -70,14 +88,14 @@ export const spawnTransparent = (opts: SessionOptions): Promise<number> => {
 
   return new Promise((resolve, reject) => {
     proc.on("error", reject);
-    proc.on("exit", (code) => resolve(code ?? 0));
+    proc.on("exit", (code) => resolve({ exitCode: code ?? 0, sessionId }));
   });
 };
 
-const buildArgs = (opts: SessionOptions): string[] => {
+const buildArgs = (opts: SessionOptions, sessionId: string | undefined): string[] => {
   const args: string[] = [];
 
-  // Inject MCP server for deckhand tools
+  // Inject MCP server for tailrec tools
   const mcpConfig = writeMcpConfig();
   args.push("--mcp-config", mcpConfig);
 
@@ -91,6 +109,8 @@ const buildArgs = (opts: SessionOptions): string[] => {
 
   if (opts.resume) {
     args.push("--resume");
+  } else if (sessionId) {
+    args.push("--session-id", sessionId);
   }
 
   if (opts.initialPrompt) {

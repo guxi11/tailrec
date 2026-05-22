@@ -1,11 +1,11 @@
 {
-  "name": "deckhand",
+  "name": "tailrec",
   "version": "0.1.0",
   "description": "Transparent LLM session wrapper with card-based context assembly",
   "type": "module",
   "bin": {
-    "deckhand": "./dist/index.js",
-    "deckhand-mcp": "./dist/mcp.js"
+    "tailrec": "dist/index.js",
+    "tailrec-mcp": "dist/mcp.js"
   },
   "scripts": {
     "build": "tsup",
@@ -13,7 +13,12 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint src/"
   },
-  "keywords": ["cli", "llm", "context-management", "cards"],
+  "keywords": [
+    "cli",
+    "llm",
+    "context-management",
+    "cards"
+  ],
   "license": "MIT",
   "engines": {
     "node": ">=20.0.0"

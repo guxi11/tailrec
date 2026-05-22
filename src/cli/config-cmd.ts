@@ -1,4 +1,4 @@
-// `deckhand config` subcommand
+// `tailrec config` subcommand
 
 import { Command } from "commander";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
@@ -7,7 +7,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml";
 import { loadConfig, getConfigPath } from "../config/index.js";
 
 export const configCommand = (): Command => {
-  const cmd = new Command("config").description("Configure deckhand settings");
+  const cmd = new Command("config").description("Configure tailrec settings");
 
   cmd
     .command("get <key>")
@@ -15,7 +15,7 @@ export const configCommand = (): Command => {
     .option("--global", "Read from global config")
     .action((key: string, opts: { global?: boolean }) => {
       const config = loadConfig();
-      const value = (config as Record<string, unknown>)[key];
+      const value = (config as unknown as Record<string, unknown>)[key];
       if (value !== undefined) {
         console.log(`${key} = ${value}`);
       } else {

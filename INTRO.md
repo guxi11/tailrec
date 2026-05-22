@@ -1,4 +1,4 @@
-# Deckhand
+# Tailrec
 
 Transparent wrapper for Claude Code that solves context explosion in multi-task sessions.
 
@@ -8,7 +8,7 @@ Claude Code in a single session accumulates all tool call history in context. Ea
 
 ## Solution
 
-Deckhand wraps Claude Code as a transparent pipe, injecting a single MCP tool: **reassemble**. When Claude decides it needs different context (new task, stale knowledge, domain pivot), it calls reassemble. Deckhand then:
+Tailrec wraps Claude Code as a transparent pipe, injecting a single MCP tool: **reassemble**. When Claude decides it needs different context (new task, stale knowledge, domain pivot), it calls reassemble. Tailrec then:
 
 1. Persists any architectural decisions to `decisions.json`
 2. Kills the current Claude session
@@ -21,17 +21,17 @@ Each iteration starts with precisely the knowledge it needs — no accumulated h
 ## How It Works
 
 ```
-$ deckhand
+$ tailrec
 
 # Claude runs normally with full TTY passthrough.
 # It has one extra MCP tool: reassemble.
 # When it calls reassemble:
 
 Claude: [calls reassemble({ next_input: "implement auth", context_hints: ["jwt", "db schema"] })]
-  → deckhand persists decisions
-  → deckhand kills claude (SIGTERM)
+  → tailrec persists decisions
+  → tailrec kills claude (SIGTERM)
   → collector selects cards: [auth-flow.md, user-schema.md, jwt-config.md]
-  → deckhand respawns claude with fresh card context
+  → tailrec respawns claude with fresh card context
   → new session starts with: "implement auth" + relevant cards only
 ```
 
@@ -56,7 +56,7 @@ description: "JWT authentication flow and token lifecycle"
 
 ## State
 
-Per-spec plain JSON files under `.deckhand/state/<spec>/`:
+Per-spec plain JSON files under `.tailrec/state/<spec>/`:
 
 - **decisions.json** — architectural choices that persist across tasks (e.g. `{"auth": "jwt", "db": "postgres"}`)
 - **completed.json** — summaries of finished tasks (context for subsequent work)
@@ -64,7 +64,7 @@ Per-spec plain JSON files under `.deckhand/state/<spec>/`:
 
 ## Cost Model
 
-| | Single session (10 tasks) | Deckhand (10 tasks) |
+| | Single session (10 tasks) | Tailrec (10 tasks) |
 |---|---|---|
 | Input token growth | O(n^2) | O(n) |
 | Task 10 quality | Degraded (attention dilution) | Same as task 1 |
@@ -72,6 +72,4 @@ Per-spec plain JSON files under `.deckhand/state/<spec>/`:
 
 ## Name
 
-- **Deck** = the deck of context cards assembled per task
-- **Hand** = what gets dealt to the agent each call
-- A deckhand orchestrates work on deck — the orchestrator dispatching isolated tasks
+**tail recursion** — each task is a tail call: the previous frame is discarded, replaced entirely by the next. No stack accumulation.

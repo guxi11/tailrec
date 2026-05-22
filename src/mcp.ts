@@ -6,7 +6,7 @@ import { loadConfig } from "./config/index.js";
 import { mergeDecisions } from "./state/index.js";
 
 const config = loadConfig();
-const SIGNAL_PATH = process.env.DECKHAND_SIGNAL_PATH!;
+const SIGNAL_PATH = process.env.TAILREC_SIGNAL_PATH!;
 
 const send = (msg: Record<string, unknown>) => {
   process.stdout.write(JSON.stringify(msg) + "\n");
@@ -46,7 +46,7 @@ const handleReassemble = (args: { next_input: string; decisions?: Record<string,
     mergeDecisions(config.state_dir, "default", args.decisions);
   }
 
-  // Write signal for deckhand parent
+  // Write signal for tailrec parent
   writeFileSync(SIGNAL_PATH, JSON.stringify({
     action: "restart",
     query: args.next_input,
@@ -54,7 +54,7 @@ const handleReassemble = (args: { next_input: string; decisions?: Record<string,
     decisions: args.decisions,
   }));
 
-  // Kill claude — deckhand will respawn with fresh cards
+  // Kill claude — tailrec will respawn with fresh cards
   setTimeout(() => process.kill(process.ppid!, "SIGTERM"), 100);
 
   return "Reassembling — restarting with fresh context...";
@@ -69,7 +69,7 @@ const handleRequest = async (req: { id?: number | string; method: string; params
         result: {
           protocolVersion: "2024-11-05",
           capabilities: { tools: {} },
-          serverInfo: { name: "deckhand", version: "0.1.0" },
+          serverInfo: { name: "tailrec", version: "0.1.0" },
         },
       });
 

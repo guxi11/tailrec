@@ -73,17 +73,24 @@ export const formatExitSummary = (session: SessionUsage): string => {
   if (sessions.length === 0) return "";
 
   const lines: string[] = [
-    `\n\x1b[2m─── deckhand session: ${sessions.length} AI session${sessions.length > 1 ? "s" : ""} ───\x1b[0m`,
+    `\n\x1b[2m─── tailrec session: ${sessions.length} AI session${sessions.length > 1 ? "s" : ""} ───\x1b[0m`,
   ];
 
   sessions.forEach((s, i) => {
     const cost = totalCost(s.entries);
     const tokens = s.entries.reduce((sum, e) => sum + e.input_tokens + e.output_tokens, 0);
-    lines.push(`\x1b[2m  #${i + 1} ${s.query.slice(0, 50)}${s.query.length > 50 ? "…" : ""} — ${tokens.toLocaleString()} tok, ${formatCost(cost)}\x1b[0m`);
+    const label = s.query.slice(0, 50) + (s.query.length > 50 ? "…" : "");
+    if (tokens > 0) {
+      lines.push(`\x1b[2m  #${i + 1} ${label} — ${tokens.toLocaleString()} tok, ${formatCost(cost)}\x1b[0m`);
+    } else {
+      lines.push(`\x1b[2m  #${i + 1} ${label}\x1b[0m`);
+    }
   });
 
   const total = totalCost(session.entries);
-  lines.push(`\x1b[2m  Total collector cost: ${formatCost(total)}\x1b[0m`);
+  if (total > 0) {
+    lines.push(`\x1b[2m  Total: ${formatCost(total)}\x1b[0m`);
+  }
 
   return lines.join("\n");
 };

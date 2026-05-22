@@ -5,13 +5,22 @@
       "WebFetch(domain:tinyhumans.gitbook.io)",
       "WebFetch(domain:www.npmjs.com)",
       "Skill(update-config)",
-      "mcp__deckhand__reassemble",
+      "mcp__tailrec__reassemble",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(npm run *)",
       "Bash(npx dist/index.js config list)",
       "Bash(node dist/index.js config list)",
-      "Bash(echo \"EXIT: $?\")"
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(./node_modules/.bin/tsc *)",
+      "Bash(git commit *)",
+      "Bash(claude settings *)",
+      "Bash(claude)",
+      "Bash(env)",
+      "Bash(timeout 5 /opt/homebrew/bin/claude -p \"say hi\")",
+      "Bash(npm publish *)",
+      "Read(//Users/zyy/**)",
+      "Bash(npm whoami *)"
     ]
   }
 }

@@ -11,21 +11,21 @@ npm run lint         # eslint src/
 
 ## Core Idea
 
-Deckhand is a transparent wrapper around Claude Code. It adds exactly one thing: an MCP server exposing the `reassemble` tool. When Claude calls reassemble, deckhand kills the session, re-selects context cards via a collector (Haiku), assembles a fresh system prompt appendix, and respawns Claude with clean context.
+Tailrec is a transparent wrapper around Claude Code. It adds exactly one thing: an MCP server exposing the `reassemble` tool. When Claude calls reassemble, tailrec kills the session, re-selects context cards via a collector (Haiku), assembles a fresh system prompt appendix, and respawns Claude with clean context.
 
-Single-session multi-task produces O(n^2) input tokens and attention dilution; deckhand isolates each task with precisely-dealt context cards, achieving O(n) cost and constant quality.
+Single-session multi-task produces O(n^2) input tokens and attention dilution; tailrec isolates each task with precisely-dealt context cards, achieving O(n) cost and constant quality.
 
 ## Architecture
 
 ```
-deckhand CLI (transparent wrapper — zero interception of Claude I/O)
+tailrec CLI (transparent wrapper — zero interception of Claude I/O)
 │
 ├── Session Loop (src/cli/repl.ts):
 │   while(true): reassemble → spawnTransparent → check signal → loop or exit
 │
 ├── spawnTransparent (src/core/session.ts):
 │   spawn claude with stdio:"inherit" (full TTY passthrough)
-│   + --mcp-config (inject deckhand MCP server)
+│   + --mcp-config (inject tailrec MCP server)
 │   + --append-system-prompt (card context appendix)
 │   + --session-id (force isolated session per iteration)
 │
@@ -57,7 +57,7 @@ deckhand CLI (transparent wrapper — zero interception of Claude I/O)
 ## Data Flow
 
 ```
-$ deckhand [task]
+$ tailrec [task]
   → reassemble(query) picks cards via collector
   → buildPrompt assembles appendix
   → spawnTransparent(claude --append-system-prompt <appendix> --mcp-config <mcp.json>)
@@ -73,13 +73,13 @@ $ deckhand [task]
 - **`src/core/`** — Session spawning (`session.ts`), reassemble orchestration (`reassemble.ts`), prompt assembly (`prompt-builder.ts`), usage tracking (`usage.ts`)
 - **`src/cards/`** — Markdown card loading with YAML frontmatter, `[[wikilink]]` extraction, bidirectional graph
 - **`src/collector/`** — Anthropic SDK call to small model for card selection
-- **`src/config/`** — Layered config: `~/.deckhand/config.yaml` (global) merged with `.deckhand/config.yaml` (project)
-- **`src/state/`** — Per-spec `decisions.json` and `completed.json` under `.deckhand/state/<spec>/`
+- **`src/config/`** — Layered config: `~/.tailrec/config.yaml` (global) merged with `.tailrec/config.yaml` (project)
+- **`src/state/`** — Per-spec `decisions.json` and `completed.json` under `.tailrec/state/<spec>/`
 - **`src/mcp.ts`** — Standalone MCP stdio server (separate tsup entry point) exposing `reassemble`
 
 ## Key Design Decisions
 
-1. **Transparent wrapper**: deckhand spawns claude with `stdio:"inherit"` and never touches I/O. The only integration point is an MCP server injected via `--mcp-config`. Zero compatibility burden with backend updates.
+1. **Transparent wrapper**: tailrec spawns claude with `stdio:"inherit"` and never touches I/O. The only integration point is an MCP server injected via `--mcp-config`. Zero compatibility burden with backend updates.
 2. **Prefix cache as constraint**: prompt assembly order is deterministic. Shared cards sort by filename. Changing shared card content invalidates cache for all tasks.
 3. **Collector is optional**: no cards → skip collector → degrade to plain wrapper with usage tracking.
 4. **Backend agnostic**: `backend` config field (`claude` | `codex` | custom command).
@@ -95,7 +95,7 @@ $ deckhand [task]
 
 ## Config
 
-`DeckhandConfig` fields: `backend`, `model`, `collector_model`, `cards_dir`, `state_dir`, `shared_card_sort_key`. Defaults in `src/config/schema.ts`.
+`TailrecConfig` fields: `backend`, `model`, `collector_model`, `cards_dir`, `state_dir`, `shared_card_sort_key`. Defaults in `src/config/schema.ts`.
 
 ## Build
 

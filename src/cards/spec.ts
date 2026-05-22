@@ -1,4 +1,4 @@
-// `deckhand spec` authoring logic
+// `tailrec spec` authoring logic
 
 import { writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";

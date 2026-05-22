@@ -1,6 +1,6 @@
 // Reassemble: persist decisions → collect cards → build appendix
 
-import type { DeckhandConfig } from "../config/index.js";
+import type { TailrecConfig } from "../config/index.js";
 import { mergeDecisions, readDecisions } from "../state/index.js";
 import { loadWorkspace, sharedCards, taskCards } from "../cards/index.js";
 import { collect } from "../collector/index.js";
@@ -21,7 +21,7 @@ export interface ReassembleResult {
 
 export const reassemble = async (
   input: ReassembleInput,
-  config: DeckhandConfig,
+  config: TailrecConfig,
   specName: string,
   sessionUsage: SessionUsage,
 ): Promise<ReassembleResult> => {
