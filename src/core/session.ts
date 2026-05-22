@@ -9,6 +9,7 @@ import { tmpdir } from "node:os";
 import type { TailrecConfig } from "../config/index.js";
 
 export interface SessionOptions {
+  backend: string;
   config: TailrecConfig;
   appendPrompt: string;
   resume?: boolean;
@@ -69,7 +70,7 @@ export const readRestartSignal = (): RestartSignal | null => {
 // Header ends after the box-closing line (╰───...───╯)
 const HEADER_END_RE = /╰[─]+╯[^\n]*\n?/;
 
-// Spawn claude inside `script` (allocates a pty so claude stays interactive)
+// Spawn backend inside `script` (allocates a pty so it stays interactive)
 // then pipe stdout through our filter to strip the header.
 export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => {
   const sessionId = opts.resume ? undefined : (opts.sessionId ?? randomUUID());
@@ -79,8 +80,8 @@ export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => 
   // Linux: script -qc "cmd args" /dev/null
   const isMac = process.platform === "darwin";
   const scriptArgs = isMac
-    ? ["-q", "/dev/null", opts.config.backend, ...args]
-    : ["-qc", [opts.config.backend, ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" "), "/dev/null"];
+    ? ["-q", "/dev/null", opts.backend, ...args]
+    : ["-qc", [opts.backend, ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" "), "/dev/null"];
 
   const proc = spawn("script", scriptArgs, {
     stdio: ["inherit", "pipe", "pipe"],
@@ -122,10 +123,6 @@ const buildArgs = (opts: SessionOptions, sessionId: string | undefined): string[
 
   if (opts.appendPrompt) {
     args.push("--append-system-prompt", opts.appendPrompt);
-  }
-
-  if (opts.config.model) {
-    args.push("--model", opts.config.model);
   }
 
   if (opts.resume) {

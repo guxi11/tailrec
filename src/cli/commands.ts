@@ -15,13 +15,14 @@ export const createProgram = (): Command => {
 
   program
     .name("tailrec")
-    .description("Transparent Claude Code wrapper with card-based context injection")
-    .version("0.1.0")
+    .description("Transparent LLM wrapper with card-based context injection")
+    .version("0.2.0")
+    .argument("<backend>", "Backend command (e.g. claude, codex)")
     .option("--spec <name>", "Spec name for state", "default")
-    .option("--resume", "Resume last claude session")
-    .action(async (opts: { spec: string; resume?: boolean }) => {
+    .option("--resume", "Resume last session")
+    .action(async (backend: string, opts: { spec: string; resume?: boolean }) => {
       const config = loadConfig();
-      await startSession(config, opts);
+      await startSession(backend, config, opts);
     });
 
   // tailrec config
@@ -67,12 +68,12 @@ export const createProgram = (): Command => {
       console.log();
     });
 
-  // tailrec run <task> — non-interactive, single prompt
+  // tailrec run <backend> <task> — non-interactive, single prompt
   program
-    .command("run <task>")
+    .command("run <backend> <task>")
     .description("Run a task non-interactively (pipe mode)")
     .option("--spec <name>", "Spec name for state", "default")
-    .action(async (task: string, opts: { spec: string }) => {
+    .action(async (backend: string, task: string, opts: { spec: string }) => {
       const config = loadConfig();
       const sessionUsage = initSessionUsage();
       const { reassemble } = await import("../core/reassemble.js");
@@ -88,6 +89,7 @@ export const createProgram = (): Command => {
       );
 
       const { exitCode } = await spawnTransparent({
+        backend,
         config,
         appendPrompt: result.prompt.appendix,
       });
@@ -133,17 +135,23 @@ export const createProgram = (): Command => {
     .command("init")
     .description("Scaffold .tailrec/ in current project")
     .action(() => {
-      const dirs = [".tailrec", ".tailrec/cards", ".tailrec/state"];
+      const dirs = [
+        ".tailrec",
+        ".tailrec/cards",
+        ".tailrec/cards/plans",
+        ".tailrec/cards/features",
+        ".tailrec/cards/designs",
+        ".tailrec/state",
+      ];
       for (const dir of dirs) {
         if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
       }
       const configPath = ".tailrec/config.yaml";
       if (!existsSync(configPath)) {
-        writeFileSync(configPath, stringifyYaml({ backend: "claude", cards_dir: ".tailrec/cards" }));
+        writeFileSync(configPath, stringifyYaml({ cards_dir: ".tailrec/cards" }));
       }
       console.log("Initialized .tailrec/ structure.");
     });
 
   return program;
 };
-

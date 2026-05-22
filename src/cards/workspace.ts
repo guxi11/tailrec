@@ -1,14 +1,15 @@
-// Card workspace — init FoamWorkspace over cards_dir
-// Note: foam-core may not be available; fallback to manual markdown parsing
+// Card workspace — recursive subdirectory loading with YAML frontmatter
 
-import { readFileSync, readdirSync, existsSync } from "node:fs";
-import { join, basename, extname } from "node:path";
+import { readFileSync, readdirSync, existsSync, statSync } from "node:fs";
+import { join, basename, extname, relative } from "node:path";
 import { parse as parseYaml } from "yaml";
 
 export interface CardFrontmatter {
+  type?: "plan" | "feature" | "design" | "task" | string;
   shared?: boolean;
   tags?: string[];
   description?: string;
+  title?: string;
   order?: number;
   [key: string]: unknown;
 }
@@ -16,6 +17,7 @@ export interface CardFrontmatter {
 export interface Card {
   name: string;
   path: string;
+  relativePath: string; // relative to cards_dir root
   frontmatter: CardFrontmatter;
   body: string;
   links: string[]; // outgoing [[wikilinks]]
@@ -45,19 +47,35 @@ const extractLinks = (body: string): string[] => {
   return links;
 };
 
-export const loadCard = (filePath: string): Card => {
+export const loadCard = (filePath: string, cardsDir: string): Card => {
   const content = readFileSync(filePath, "utf-8");
   const { frontmatter, body } = parseFrontmatter(content);
   const name = basename(filePath, extname(filePath));
   const links = extractLinks(body);
-  return { name, path: filePath, frontmatter, body, links };
+  const relativePath = relative(cardsDir, filePath);
+  return { name, path: filePath, relativePath, frontmatter, body, links };
+};
+
+// Recursively collect all .md files under a directory
+const collectMdFiles = (dir: string): string[] => {
+  if (!existsSync(dir)) return [];
+  const results: string[] = [];
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    const stat = statSync(full);
+    if (stat.isDirectory()) {
+      results.push(...collectMdFiles(full));
+    } else if (entry.endsWith(".md")) {
+      results.push(full);
+    }
+  }
+  return results;
 };
 
 export const loadWorkspace = (cardsDir: string): Card[] => {
   if (!existsSync(cardsDir)) return [];
-  return readdirSync(cardsDir)
-    .filter((f) => f.endsWith(".md"))
-    .map((f) => loadCard(join(cardsDir, f)))
+  return collectMdFiles(cardsDir)
+    .map((f) => loadCard(f, cardsDir))
     .sort((a, b) => a.name.localeCompare(b.name));
 };
 
@@ -66,3 +84,11 @@ export const sharedCards = (cards: Card[]): Card[] =>
 
 export const taskCards = (cards: Card[]): Card[] =>
   cards.filter((c) => c.frontmatter.shared !== true);
+
+// Filter cards by type field
+export const cardsByType = (cards: Card[], type: string): Card[] =>
+  cards.filter((c) => c.frontmatter.type === type);
+
+// Find card by name across all subdirectories (wikilink resolution)
+export const resolveWikilink = (cards: Card[], linkName: string): Card | undefined =>
+  cards.find((c) => c.name === linkName);
