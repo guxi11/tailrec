@@ -48,6 +48,8 @@ export const startSession = async (
     // Check for restart signal from MCP
     const signal = readRestartSignal();
     if (signal) {
+      // Erase trailing TUI frame left by killed session
+      process.stdout.write("\x1b[1F\x1b[J");
       // If a plan task just completed, run the bridge
       const activePlan = signal.decisions?._active_plan as string | undefined;
       const activeTask = signal.decisions?._active_task as string | undefined;

@@ -67,21 +67,7 @@ export const readRestartSignal = (): RestartSignal | null => {
   }
 };
 
-// Strip ANSI escape sequences for pattern matching
-const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]/g;
-const stripAnsi = (s: string): string => s.replace(ANSI_RE, "");
-const HEADER_TIMEOUT_MS = 3000;
-
-// Map an index in ANSI-stripped text back to raw text index
-const cleanToRawIdx = (raw: string, cleanEnd: number): number => {
-  let rawIdx = 0, cleanIdx = 0;
-  while (cleanIdx < cleanEnd && rawIdx < raw.length) {
-    const m = raw.slice(rawIdx).match(/^\x1b\[[0-9;]*[a-zA-Z]/);
-    if (m) { rawIdx += m[0].length; continue; }
-    rawIdx++; cleanIdx++;
-  }
-  return rawIdx;
-};
+// Response marker — Claude Code prefixes responses with ⏺
 
 // Spawn backend inside `script` (allocates a pty so it stays interactive)
 // - Suppresses output once signal file appears (restart imminent)
@@ -118,19 +104,9 @@ export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => 
     });
   }
 
-  // Has initialPrompt → strip header (everything before echoed prompt line)
-  const prompt = opts.initialPrompt;
+  // Has initialPrompt → strip header until response starts (⏺ marker)
   let headerDone = false;
   let headerBuf = "";
-
-  const flushHeader = () => {
-    if (headerDone) return;
-    headerDone = true;
-    if (headerBuf) process.stdout.write(headerBuf);
-    headerBuf = "";
-  };
-
-  const headerTimer = setTimeout(flushHeader, HEADER_TIMEOUT_MS);
 
   proc.stdout!.on("data", (chunk: Buffer) => {
     if (isMuted()) return;
@@ -139,17 +115,13 @@ export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => 
       return;
     }
     headerBuf += chunk.toString();
-    const clean = stripAnsi(headerBuf);
-    const promptIdx = clean.indexOf(prompt);
-    if (promptIdx !== -1) {
-      clearTimeout(headerTimer);
-      const lineEnd = clean.indexOf("\n", promptIdx);
-      if (lineEnd !== -1) {
-        const rawIdx = cleanToRawIdx(headerBuf, lineEnd + 1);
-        const afterHeader = headerBuf.slice(rawIdx);
-        if (afterHeader) process.stdout.write(afterHeader);
-        headerDone = true;
-      }
+    // Claude Code response starts with ⏺ — strip everything before it
+    const markerIdx = headerBuf.indexOf("⏺");
+    if (markerIdx !== -1) {
+      const afterHeader = headerBuf.slice(markerIdx);
+      if (afterHeader) process.stdout.write(afterHeader);
+      headerDone = true;
+      headerBuf = "";
     }
   });
 
@@ -158,8 +130,7 @@ export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => 
   return new Promise((resolve, reject) => {
     proc.on("error", reject);
     proc.on("exit", (code) => {
-      clearTimeout(headerTimer);
-      if (!muted) flushHeader();
+      if (!headerDone && !muted && headerBuf) process.stdout.write(headerBuf);
       resolve({ exitCode: code ?? 0, sessionId });
     });
   });
