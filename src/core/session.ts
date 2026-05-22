@@ -67,11 +67,24 @@ export const readRestartSignal = (): RestartSignal | null => {
   }
 };
 
-// Header ends after the box-closing line (╰───...───╯)
-const HEADER_END_RE = /╰[─]+╯[^\n]*\n?/;
+// Strip ANSI escape sequences for pattern matching
+const ANSI_RE = /\x1b\[[0-9;]*[a-zA-Z]/g;
+const stripAnsi = (s: string): string => s.replace(ANSI_RE, "");
+const HEADER_TIMEOUT_MS = 3000;
+
+// Map an index in ANSI-stripped text back to raw text index
+const cleanToRawIdx = (raw: string, cleanEnd: number): number => {
+  let rawIdx = 0, cleanIdx = 0;
+  while (cleanIdx < cleanEnd && rawIdx < raw.length) {
+    const m = raw.slice(rawIdx).match(/^\x1b\[[0-9;]*[a-zA-Z]/);
+    if (m) { rawIdx += m[0].length; continue; }
+    rawIdx++; cleanIdx++;
+  }
+  return rawIdx;
+};
 
 // Spawn backend inside `script` (allocates a pty so it stays interactive)
-// then pipe stdout through our filter to strip the header.
+// Strips all output before the echoed initialPrompt line.
 export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => {
   const sessionId = opts.resume ? undefined : (opts.sessionId ?? randomUUID());
   const args = buildArgs(opts, sessionId);
@@ -88,8 +101,29 @@ export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => 
     env: { ...process.env },
   });
 
+  // If no initialPrompt, pass through everything (interactive start)
+  if (!opts.initialPrompt) {
+    proc.stdout!.on("data", (chunk: Buffer) => process.stdout.write(chunk));
+    proc.stderr!.on("data", (chunk: Buffer) => process.stderr.write(chunk));
+    return new Promise((resolve, reject) => {
+      proc.on("error", reject);
+      proc.on("exit", (code) => resolve({ exitCode: code ?? 0, sessionId }));
+    });
+  }
+
+  // Strip header: everything before the line containing initialPrompt
+  const prompt = opts.initialPrompt;
   let headerDone = false;
   let headerBuf = "";
+
+  const flushHeader = () => {
+    if (headerDone) return;
+    headerDone = true;
+    if (headerBuf) process.stdout.write(headerBuf);
+    headerBuf = "";
+  };
+
+  const headerTimer = setTimeout(flushHeader, HEADER_TIMEOUT_MS);
 
   proc.stdout!.on("data", (chunk: Buffer) => {
     if (headerDone) {
@@ -97,11 +131,18 @@ export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => 
       return;
     }
     headerBuf += chunk.toString();
-    const match = headerBuf.match(HEADER_END_RE);
-    if (match) {
-      const afterHeader = headerBuf.slice(match.index! + match[0].length);
-      if (afterHeader) process.stdout.write(afterHeader);
-      headerDone = true;
+    const clean = stripAnsi(headerBuf);
+    // Find the echoed prompt line (❯ <prompt>) and cut after it
+    const promptIdx = clean.indexOf(prompt);
+    if (promptIdx !== -1) {
+      clearTimeout(headerTimer);
+      const lineEnd = clean.indexOf("\n", promptIdx);
+      if (lineEnd !== -1) {
+        const rawIdx = cleanToRawIdx(headerBuf, lineEnd + 1);
+        const afterHeader = headerBuf.slice(rawIdx);
+        if (afterHeader) process.stdout.write(afterHeader);
+        headerDone = true;
+      }
     }
   });
 
@@ -110,7 +151,11 @@ export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => 
 
   return new Promise((resolve, reject) => {
     proc.on("error", reject);
-    proc.on("exit", (code) => resolve({ exitCode: code ?? 0, sessionId }));
+    proc.on("exit", (code) => {
+      clearTimeout(headerTimer);
+      flushHeader();
+      resolve({ exitCode: code ?? 0, sessionId });
+    });
   });
 };
 

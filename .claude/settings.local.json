@@ -23,7 +23,11 @@
       "Bash(node -e ' *)",
       "Bash(node *)",
       "Bash(npm uninstall *)",
-      "Bash(grep *)"
+      "Bash(grep *)",
+      "Bash(cat)",
+      "Read(//tmp/**)",
+      "Bash(awk '{print $9, \"\\(\" $5 \"\\)\"}')",
+      "mcp__tailrec__reassemble"
     ]
   }
 }
