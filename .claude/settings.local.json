@@ -5,7 +5,7 @@
       "WebFetch(domain:tinyhumans.gitbook.io)",
       "WebFetch(domain:www.npmjs.com)",
       "Skill(update-config)",
-      "mcp__tailrec__reassemble",
+      "mcp__deckhand__reassemble",
       "Bash(git add *)",
       "Bash(git commit -m ' *)",
       "Bash(npm run *)",
@@ -18,9 +18,11 @@
       "Bash(claude)",
       "Bash(env)",
       "Bash(timeout 5 /opt/homebrew/bin/claude -p \"say hi\")",
-      "Bash(npm publish *)",
-      "Read(//Users/zyy/**)",
-      "Bash(npm whoami *)"
+      "Bash(gtimeout 5 /opt/homebrew/bin/claude -p \"say hi\")",
+      "Bash(npm install *)",
+      "Bash(node -e ' *)",
+      "Bash(node *)",
+      "Bash(npm uninstall *)"
     ]
   }
 }

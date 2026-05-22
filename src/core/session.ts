@@ -66,25 +66,46 @@ export const readRestartSignal = (): RestartSignal | null => {
   }
 };
 
-// Clear claude's startup header by restoring pre-spawn cursor position
-const clearHeader = (delayMs = 300): void => {
-  process.stdout.write("\x1B7"); // save cursor before header
-  setTimeout(() => {
-    process.stdout.write("\x1B8\x1B[J"); // restore cursor + clear below
-  }, delayMs);
-};
+// Header ends after the box-closing line (╰───...───╯)
+const HEADER_END_RE = /╰[─]+╯[^\n]*\n?/;
 
-// Spawn claude with full TTY inheritance
+// Spawn claude inside `script` (allocates a pty so claude stays interactive)
+// then pipe stdout through our filter to strip the header.
 export const spawnTransparent = (opts: SessionOptions): Promise<SpawnResult> => {
   const sessionId = opts.resume ? undefined : (opts.sessionId ?? randomUUID());
   const args = buildArgs(opts, sessionId);
 
-  clearHeader();
+  // macOS: script -q /dev/null cmd ...args
+  // Linux: script -qc "cmd args" /dev/null
+  const isMac = process.platform === "darwin";
+  const scriptArgs = isMac
+    ? ["-q", "/dev/null", opts.config.backend, ...args]
+    : ["-qc", [opts.config.backend, ...args].map(a => `'${a.replace(/'/g, "'\\''")}'`).join(" "), "/dev/null"];
 
-  const proc = spawn(opts.config.backend, args, {
-    stdio: "inherit",
+  const proc = spawn("script", scriptArgs, {
+    stdio: ["inherit", "pipe", "pipe"],
     env: { ...process.env },
   });
+
+  let headerDone = false;
+  let headerBuf = "";
+
+  proc.stdout!.on("data", (chunk: Buffer) => {
+    if (headerDone) {
+      process.stdout.write(chunk);
+      return;
+    }
+    headerBuf += chunk.toString();
+    const match = headerBuf.match(HEADER_END_RE);
+    if (match) {
+      const afterHeader = headerBuf.slice(match.index! + match[0].length);
+      if (afterHeader) process.stdout.write(afterHeader);
+      headerDone = true;
+    }
+  });
+
+  // stderr from script (if any) goes to our stderr
+  proc.stderr!.on("data", (chunk: Buffer) => process.stderr.write(chunk));
 
   return new Promise((resolve, reject) => {
     proc.on("error", reject);
