@@ -37,6 +37,11 @@ const getMcpBin = (): string => {
   return resolve(__dirname, "mcp.js");
 };
 
+const getPluginDir = (): string => {
+  const __dirname = dirname(fileURLToPath(import.meta.url));
+  return resolve(__dirname, "../plugin");
+};
+
 const writeMcpConfig = (): string => {
   if (!existsSync(SIGNAL_DIR)) mkdirSync(SIGNAL_DIR, { recursive: true });
 
@@ -142,6 +147,9 @@ const buildArgs = (opts: SessionOptions, sessionId: string | undefined): string[
   // Inject MCP server for tailrec tools
   const mcpConfig = writeMcpConfig();
   args.push("--mcp-config", mcpConfig);
+
+  // Inject plugin dir for slash commands (/t.plan, /t.start, etc.)
+  args.push("--plugin-dir", getPluginDir());
 
   if (opts.appendPrompt) {
     args.push("--append-system-prompt", opts.appendPrompt);

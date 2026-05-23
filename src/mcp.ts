@@ -11,7 +11,6 @@ import { handleSpecify } from "./mcp/specify.js";
 import { handleAdjust } from "./mcp/adjust.js";
 import { handleStart } from "./mcp/start.js";
 import { handleArchive } from "./mcp/archive.js";
-import { handleCost } from "./mcp/cost.js";
 
 const config = loadConfig();
 const SIGNAL_PATH = process.env.TAILREC_SIGNAL_PATH!;
@@ -100,11 +99,6 @@ const TOOLS = [
       properties: { plan: { type: "string", description: "Plan slug to archive (uses first plan if omitted)" } },
     },
   },
-  {
-    name: "t.cost",
-    description: "Show actual tailrec cost vs hypothetical single-session O(n²) cost.",
-    inputSchema: { type: "object", properties: {} },
-  },
 ];
 
 const handleReassemble = (args: { next_input: string; decisions?: Record<string, unknown>; context_hints?: string[] }) => {
@@ -133,7 +127,6 @@ const dispatch = (name: string, args: Record<string, unknown>): string => {
     case "t.tasks": return handleTasks(args as { plan?: string });
     case "t.start": return handleStart(args as { plan?: string });
     case "t.archive": return handleArchive(args as { plan?: string });
-    case "t.cost": return handleCost(args as Record<string, never>);
     default: return `Unknown tool: ${name}`;
   }
 };

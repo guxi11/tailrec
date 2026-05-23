@@ -21,9 +21,8 @@ You have access to the following MCP tools from the "tailrec" server. Use them w
 | t.tasks | Show current task list with completion status |
 | t.start | Begin the next incomplete task (triggers reassemble with task context) |
 | t.archive | Archive a completed plan, extract design into ground truth cards |
-| t.cost | Show actual token cost vs hypothetical single-session O(n²) cost |
 
-When the user types a command like "t.plan", "t.cost", etc., call the corresponding MCP tool.`;
+When the user types a command like "t.plan", "t.tasks", etc., call the corresponding MCP tool.`;
 
 export const buildPrompt = (args: {
   sharedCards: Card[];

@@ -78,7 +78,7 @@ export const formatExitSummary = (session: SessionUsage): string => {
   if (sessions.length === 0) return "";
 
   const lines: string[] = [
-    `\n\x1b[2m─── tailrec session: ${sessions.length} AI session${sessions.length > 1 ? "s" : ""} ───\x1b[0m`,
+    `\n\x1b[2m─── tailrec session: ${sessions.length} iteration${sessions.length > 1 ? "s" : ""} ───\x1b[0m`,
   ];
 
   sessions.forEach((s, i) => {
@@ -92,9 +92,23 @@ export const formatExitSummary = (session: SessionUsage): string => {
     }
   });
 
-  const total = totalCost(session.entries);
-  if (total > 0) {
-    lines.push(`\x1b[2m  Total: ${formatCost(total)}\x1b[0m`);
+  const actualCost = totalCost(session.entries);
+  if (actualCost > 0) {
+    // Hypothetical O(n²) single-session cost
+    let hypotheticalInput = 0;
+    let cumulativeContext = 0;
+    const totalOutput = session.entries.reduce((s, e) => s + e.output_tokens, 0);
+    for (const sess of sessions) {
+      const sessInput = sess.entries.reduce((s, e) => s + e.input_tokens, 0);
+      const sessOutput = sess.entries.reduce((s, e) => s + e.output_tokens, 0);
+      hypotheticalInput += cumulativeContext + sessInput;
+      cumulativeContext += sessOutput;
+    }
+    // Sonnet pricing: $3/Mtok input, $15/Mtok output
+    const hypotheticalCost = (hypotheticalInput * 3 + totalOutput * 15) / 1_000_000;
+    const savings = hypotheticalCost > 0 ? Math.round((1 - actualCost / hypotheticalCost) * 100) : 0;
+
+    lines.push(`\x1b[2m  Actual: ${formatCost(actualCost)}  │  Single-session estimate: ${formatCost(hypotheticalCost)}  │  Saved: ~${savings}%\x1b[0m`);
   }
 
   return lines.join("\n");

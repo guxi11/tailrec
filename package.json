@@ -7,6 +7,10 @@
     "tailrec": "dist/index.js",
     "tailrec-mcp": "dist/mcp.js"
   },
+  "files": [
+    "dist",
+    "plugin"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",
