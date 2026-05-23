@@ -41,9 +41,12 @@ export const startSession = async (
 
     // Read actual session cost from JSONL
     if (sessionId) {
-      const entry = readSessionCost(sessionId, "claude-sonnet-4-20250514");
+      const entry = readSessionCost(sessionId, "claude-sonnet-4-20250514", backend);
       if (entry) recordUsage(sessionUsage, entry);
     }
+
+    // Persist usage incrementally so t.cost MCP tool sees current data
+    persistUsage(config.state_dir, sessionUsage);
 
     // Check for restart signal from MCP
     const signal = readRestartSignal();

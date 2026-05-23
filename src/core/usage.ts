@@ -41,9 +41,14 @@ export const persistUsage = (stateDir: string, session: SessionUsage): void => {
   const dir = dirname(p);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
 
-  // Append to existing log
+  // Upsert: replace entry with same sessionStart, or append if new
   const existing: SessionUsage[] = existsSync(p) ? JSON.parse(readFileSync(p, "utf-8")) : [];
-  existing.push(session);
+  const idx = existing.findIndex((s) => s.sessionStart === session.sessionStart);
+  if (idx >= 0) {
+    existing[idx] = session;
+  } else {
+    existing.push(session);
+  }
   writeFileSync(p, JSON.stringify(existing, null, 2));
 };
 
