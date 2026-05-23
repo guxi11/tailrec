@@ -5,8 +5,6 @@ import { mergeDecisions, readDecisions } from "../state/index.js";
 import { loadWorkspace, sharedCards, taskCards } from "../cards/index.js";
 import { collect } from "../collector/index.js";
 import { buildPrompt, type AssembledPrompt } from "./prompt-builder.js";
-import { recordUsage, type SessionUsage } from "./usage.js";
-import type { UsageEntry } from "../utils/cost.js";
 
 export interface ReassembleInput {
   next_input: string;
@@ -23,7 +21,6 @@ export const reassemble = async (
   input: ReassembleInput,
   config: TailrecConfig,
   specName: string,
-  sessionUsage: SessionUsage,
 ): Promise<ReassembleResult> => {
   // 1. Persist decisions
   if (input.decisions) {
@@ -42,17 +39,6 @@ export const reassemble = async (
     cards: task,
     model: config.collector_model,
   });
-
-  // Record collector usage
-  const collectorEntry: UsageEntry = {
-    model: config.collector_model,
-    input_tokens: collectorResult.usage.input_tokens,
-    output_tokens: collectorResult.usage.output_tokens,
-    cache_read_tokens: 0,
-    cache_write_tokens: 0,
-    timestamp: new Date().toISOString(),
-  };
-  recordUsage(sessionUsage, collectorEntry);
 
   // 4. Resolve selected cards
   const selectedCards = collectorResult.selectedCards

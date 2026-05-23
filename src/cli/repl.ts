@@ -3,11 +3,12 @@
 import type { TailrecConfig } from "../config/index.js";
 import { reassemble } from "../core/reassemble.js";
 import { spawnTransparent, readRestartSignal } from "../core/session.js";
-import { initSessionUsage, startAiSession, recordUsage, persistUsage, formatExitSummary } from "../core/usage.js";
-import { readSessionCost } from "../core/session-cost.js";
+import { readSessionStats } from "../core/session-cost.js";
 import { runBridge } from "../core/bridge.js";
 import { markTaskDone } from "../mcp/start.js";
-import type { UsageEntry } from "../utils/cost.js";
+import type { IterationStats } from "../utils/estimate.js";
+import { formatEstimate } from "../utils/estimate.js";
+import { warmPricingCache } from "../utils/pricing.js";
 
 export const startSession = async (
   backend: string,
@@ -15,20 +16,20 @@ export const startSession = async (
   opts?: { spec?: string; resume?: boolean; task?: string },
 ): Promise<void> => {
   const specName = opts?.spec ?? "default";
-  const sessionUsage = initSessionUsage();
+  const iterations: IterationStats[] = [];
+
+  // Pre-warm pricing cache in background (non-blocking)
+  warmPricingCache().catch(() => {});
 
   let query = opts?.task ?? "";
   let resume = opts?.resume;
 
   // Restart loop — respawn backend when MCP signals restart
   while (true) {
-    startAiSession(sessionUsage, query);
-
     const result = await reassemble(
       { next_input: query },
       config,
       specName,
-      sessionUsage,
     );
 
     const { exitCode, sessionId } = await spawnTransparent({
@@ -39,14 +40,11 @@ export const startSession = async (
       initialPrompt: query,
     });
 
-    // Read actual session cost from JSONL
+    // Collect per-iteration stats from session JSONL
     if (sessionId) {
-      const entry = readSessionCost(sessionId, "claude-sonnet-4-20250514", backend);
-      if (entry) recordUsage(sessionUsage, entry);
+      const stats = readSessionStats(sessionId, backend);
+      if (stats) iterations.push(stats);
     }
-
-    // Persist usage incrementally so t.cost MCP tool sees current data
-    persistUsage(config.state_dir, sessionUsage);
 
     // Check for restart signal from MCP
     const signal = readRestartSignal();
@@ -62,7 +60,7 @@ export const startSession = async (
 
         // Run inter-session bridge: small model → input.md for next task
         try {
-          const bridgeResult = await runBridge(
+          await runBridge(
             {
               completedTask: activeTask,
               nextTask: signal.query,
@@ -71,16 +69,6 @@ export const startSession = async (
             },
             config,
           );
-
-          const bridgeEntry: UsageEntry = {
-            model: config.bridge_model,
-            input_tokens: bridgeResult.usage.input_tokens,
-            output_tokens: bridgeResult.usage.output_tokens,
-            cache_read_tokens: 0,
-            cache_write_tokens: 0,
-            timestamp: new Date().toISOString(),
-          };
-          recordUsage(sessionUsage, bridgeEntry);
         } catch { /* bridge failure is non-fatal */ }
       }
 
@@ -89,10 +77,9 @@ export const startSession = async (
       continue;
     }
 
-    // Normal exit — show usage then persist
-    const summary = formatExitSummary(sessionUsage);
+    // Normal exit — show cost estimate
+    const summary = await formatEstimate(iterations);
     if (summary) process.stderr.write(summary + "\n");
-    persistUsage(config.state_dir, sessionUsage);
     process.exit(exitCode);
   }
 };

@@ -4,7 +4,6 @@ import { Command } from "commander";
 import { loadConfig } from "../config/index.js";
 import { loadWorkspace, buildGraph, createCard, openInEditor } from "../cards/index.js";
 import { readDecisions, readCompleted } from "../state/index.js";
-import { initSessionUsage, startAiSession, persistUsage, formatExitSummary } from "../core/usage.js";
 import { startSession } from "./repl.js";
 import { configCommand } from "./config-cmd.js";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -75,28 +74,30 @@ export const createProgram = (): Command => {
     .option("--spec <name>", "Spec name for state", "default")
     .action(async (backend: string, task: string, opts: { spec: string }) => {
       const config = loadConfig();
-      const sessionUsage = initSessionUsage();
       const { reassemble } = await import("../core/reassemble.js");
       const { spawnTransparent } = await import("../core/session.js");
-
-      startAiSession(sessionUsage, task);
+      const { readSessionStats } = await import("../core/session-cost.js");
+      const { formatEstimate } = await import("../utils/estimate.js");
 
       const result = await reassemble(
         { next_input: task },
         config,
         opts.spec,
-        sessionUsage,
       );
 
-      const { exitCode } = await spawnTransparent({
+      const { exitCode, sessionId } = await spawnTransparent({
         backend,
         config,
         appendPrompt: result.prompt.appendix,
       });
 
-      const summary = formatExitSummary(sessionUsage);
-      if (summary) process.stderr.write(summary + "\n");
-      persistUsage(config.state_dir, sessionUsage);
+      if (sessionId) {
+        const stats = readSessionStats(sessionId, backend);
+        if (stats) {
+          const summary = await formatEstimate([stats]);
+          if (summary) process.stderr.write(summary + "\n");
+        }
+      }
       process.exit(exitCode);
     });
 

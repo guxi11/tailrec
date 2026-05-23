@@ -31,7 +31,12 @@
       "mcp__tailrec__t_cost",
       "Bash(npx tsc *)",
       "Read(//Users/zyy/**)",
-      "Read(//usr/local/bin/**)"
+      "Read(//usr/local/bin/**)",
+      "Bash(python3 -c ' *)",
+      "Bash(python3 *)",
+      "Bash(npm list *)",
+      "Bash(pip show *)",
+      "Bash(pip3 show *)"
     ]
   }
 }
