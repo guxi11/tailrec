@@ -1,7 +1,7 @@
 // Load and merge global + project config
 
 import { readFileSync, existsSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { homedir } from "node:os";
 import { parse as parseYaml } from "yaml";
 import { TailrecConfig, DEFAULT_CONFIG } from "./schema.js";
@@ -21,7 +21,11 @@ const loadYaml = (path: string): Partial<TailrecConfig> => {
 export const loadConfig = (): TailrecConfig => {
   const global = loadYaml(GLOBAL_CONFIG_PATH);
   const project = loadYaml(PROJECT_CONFIG_PATH);
-  return { ...DEFAULT_CONFIG, ...global, ...project };
+  const merged = { ...DEFAULT_CONFIG, ...global, ...project };
+  // Resolve relative paths to absolute (anchored to project root)
+  merged.cards_dir = resolve(process.cwd(), merged.cards_dir);
+  merged.state_dir = resolve(process.cwd(), merged.state_dir);
+  return merged;
 };
 
 export const getConfigPath = (scope: "global" | "project"): string =>

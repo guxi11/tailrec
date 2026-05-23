@@ -4,6 +4,7 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfig } from "../config/index.js";
+import { parseTasks } from "./tasks.js";
 
 const slugify = (title: string): string =>
   title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -65,6 +66,26 @@ description: "Task breakdown for ${title}"
 
 <!-- Format: - [ ] task title | - [x] completed task -->
 `);
+
+  // If content includes task lines (- [ ]), generate per-task card dirs
+  const taskLines = args.content.split("\n").filter((l) => /^- \[[ x]\] /.test(l));
+  if (taskLines.length > 0) {
+    const tasks = parseTasks(taskLines.join("\n"));
+    for (const task of tasks) {
+      const taskSlug = slugify(task.title);
+      const taskDir = join(planDir, "tasks", taskSlug);
+      mkdirSync(taskDir, { recursive: true });
+      writeFileSync(join(taskDir, "task.md"), `---
+type: task
+title: "${task.title}"
+shared: false
+description: "Task: ${task.title} (plan: ${slug})"
+---
+
+# ${task.title}
+`);
+    }
+  }
 
   return `Created plan "${title}" at ${planDir}\nFiles: plan.md, design.md, tasks.md\nNext: use t.specify to add constraints, or edit tasks.md directly.`;
 };

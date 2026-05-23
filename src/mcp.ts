@@ -36,7 +36,7 @@ const TOOLS = [
   },
   {
     name: "t.plan",
-    description: "Generate a structured plan with cards. Creates plan.md, design.md, tasks.md under cards/plans/<title>/",
+    description: "Generate a structured plan with cards. Creates plan.md, design.md, tasks.md under .cards/plans/<title>/",
     inputSchema: {
       type: "object",
       properties: { content: { type: "string", description: "Plan description (first line = title)" } },

@@ -43,12 +43,21 @@ export const runBridge = async (
     .map((b) => b.text)
     .join("");
 
-  // Write to next task's input.md
+  // Write to next task's input.md with frontmatter for collector discovery
   const taskSlug = input.nextTask.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const inputMdPath = join(config.cards_dir, "plans", input.planSlug, "tasks", taskSlug, "input.md");
   const dir = dirname(inputMdPath);
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
-  writeFileSync(inputMdPath, text);
+
+  const frontmatter = `---
+type: task
+title: "Handoff → ${input.nextTask}"
+shared: false
+description: "Context handoff from '${input.completedTask}' to '${input.nextTask}'"
+---
+
+`;
+  writeFileSync(inputMdPath, frontmatter + text);
 
   return {
     inputMdPath,

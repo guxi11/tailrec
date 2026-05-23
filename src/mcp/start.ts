@@ -23,9 +23,11 @@ export const handleStart = (args: { plan?: string }): string => {
 
   if (!nextTask) return `All tasks in "${planSlug}" are complete!`;
 
-  // Read design.md for shared principles
+  // Read design.md for shared principles (injected directly into task context)
   const designPath = join(planDir, "design.md");
-  const design = existsSync(designPath) ? readFileSync(designPath, "utf-8") : "";
+  const designRaw = existsSync(designPath) ? readFileSync(designPath, "utf-8") : "";
+  // Strip frontmatter for inline inclusion
+  const designBody = designRaw.replace(/^---[\s\S]*?---\s*/, "").trim();
 
   // Read task-specific input.md if it exists (handoff from previous task)
   const taskSlug = nextTask.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -41,6 +43,7 @@ export const handleStart = (args: { plan?: string }): string => {
 
   const query = [
     `## Task: ${nextTask.title}`,
+    designBody ? `\n## Design Principles\n${designBody}` : "",
     handoff ? `\n## Handoff from previous task\n${handoff}` : "",
     `\n## Instructions`,
     `Complete the task above. Before finishing:`,
@@ -51,7 +54,6 @@ export const handleStart = (args: { plan?: string }): string => {
   const contextHints = [
     `plan: ${planSlug}`,
     `task: ${nextTask.title}`,
-    design ? "needs design principles" : "",
   ].filter(Boolean);
 
   writeFileSync(SIGNAL_PATH, JSON.stringify({

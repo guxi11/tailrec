@@ -138,10 +138,10 @@ export const createProgram = (): Command => {
     .action(() => {
       const dirs = [
         ".tailrec",
-        ".tailrec/cards",
-        ".tailrec/cards/plans",
-        ".tailrec/cards/features",
-        ".tailrec/cards/designs",
+        ".tailrec/.cards",
+        ".tailrec/.cards/plans",
+        ".tailrec/.cards/features",
+        ".tailrec/.cards/designs",
         ".tailrec/state",
       ];
       for (const dir of dirs) {
@@ -149,7 +149,7 @@ export const createProgram = (): Command => {
       }
       const configPath = ".tailrec/config.yaml";
       if (!existsSync(configPath)) {
-        writeFileSync(configPath, stringifyYaml({ cards_dir: ".tailrec/cards" }));
+        writeFileSync(configPath, stringifyYaml({ cards_dir: ".tailrec/.cards" }));
       }
       console.log("Initialized .tailrec/ structure.");
     });
