@@ -7,7 +7,11 @@ allowed-tools: []
 
 # Adjust Tasks
 
-Call the `t.adjust` MCP tool with the user's input as `content`. The content should be in checkbox format: `- [ ] task` / `- [x] done`. Optionally pass `plan` if specified.
+Call the `t.adjust` MCP tool. The `content` should be in checkbox format: `- [ ] task` / `- [x] done`.
+
+This also creates per-task card directories (`tasks/<slug>/task.md`). If you have detailed specs for individual tasks, call `t.plan` with the full structured JSON instead (which populates task.md with specs).
+
+Optionally pass `plan` if the user specifies which plan.
 
 ## Arguments
 

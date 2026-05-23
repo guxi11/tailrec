@@ -29,11 +29,16 @@ export const handleStart = (args: { plan?: string }): string => {
   // Strip frontmatter for inline inclusion
   const designBody = designRaw.replace(/^---[\s\S]*?---\s*/, "").trim();
 
-  // Read task-specific input.md if it exists (handoff from previous task)
+  // Read task-specific spec (task.md) and handoff (input.md)
   const taskSlug = nextTask.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const taskDir = join(planDir, "tasks", taskSlug);
+  const taskMdPath = join(taskDir, "task.md");
   const inputPath = join(taskDir, "input.md");
-  const handoff = existsSync(inputPath) ? readFileSync(inputPath, "utf-8") : "";
+
+  const taskSpecRaw = existsSync(taskMdPath) ? readFileSync(taskMdPath, "utf-8") : "";
+  const taskSpec = taskSpecRaw.replace(/^---[\s\S]*?---\s*/, "").trim();
+  const handoffRaw = existsSync(inputPath) ? readFileSync(inputPath, "utf-8") : "";
+  const handoff = handoffRaw.replace(/^---[\s\S]*?---\s*/, "").trim();
 
   // Build the reassemble signal — the parent tailrec loop will pick this up
   const SIGNAL_PATH = process.env["TAILREC_SIGNAL_PATH"];
@@ -43,7 +48,8 @@ export const handleStart = (args: { plan?: string }): string => {
 
   const query = [
     `## Task: ${nextTask.title}`,
-    designBody ? `\n## Design Principles\n${designBody}` : "",
+    taskSpec ? `\n## Task Spec\n${taskSpec}` : "",
+    designBody ? `\n## Design Constraints\n${designBody}` : "",
     handoff ? `\n## Handoff from previous task\n${handoff}` : "",
     `\n## Instructions`,
     `Complete the task above. Before finishing:`,

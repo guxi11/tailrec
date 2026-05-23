@@ -36,7 +36,7 @@ const TOOLS = [
   },
   {
     name: "t.plan",
-    description: "Generate a structured plan with cards. Creates plan.md, design.md, tasks.md under .cards/plans/<title>/",
+    description: "Generate a structured plan with cards. Creates plan.md, design.md, tasks.md under cards/plans/<title>/",
     inputSchema: {
       type: "object",
       properties: { content: { type: "string", description: "Plan description (first line = title)" } },
@@ -117,7 +117,7 @@ const handleReassemble = (args: { next_input: string; decisions?: Record<string,
   return "Reassembling — restarting with fresh context...";
 };
 
-const dispatch = (name: string, args: Record<string, unknown>): string => {
+const dispatch = async (name: string, args: Record<string, unknown>): Promise<string> => {
   switch (name) {
     case "reassemble": return handleReassemble(args as Parameters<typeof handleReassemble>[0]);
     case "t.plan": return handlePlan(args as { content: string });
@@ -153,7 +153,7 @@ const handleRequest = async (req: { id?: number | string; method: string; params
     case "tools/call": {
       const params = req.params as { name: string; arguments?: Record<string, unknown> };
       const args = (params.arguments ?? {}) as Record<string, unknown>;
-      const text = dispatch(params.name, args);
+      const text = await dispatch(params.name, args);
       return send({
         jsonrpc: "2.0",
         id: req.id,
