@@ -12,6 +12,7 @@ export interface SessionOptions {
   backend: string;
   config: TailrecConfig;
   appendPrompt: string;
+  specName?: string;
   resume?: boolean;
   initialPrompt?: string;
   sessionId?: string;
@@ -23,7 +24,7 @@ export interface SpawnResult {
 }
 
 export interface RestartSignal {
-  action: "restart";
+  action: "restart" | "start_task";
   query: string;
   decisions?: Record<string, unknown>;
   contextHints?: string[];
@@ -42,7 +43,7 @@ const getPluginDir = (): string => {
   return resolve(__dirname, "../plugin");
 };
 
-const writeMcpConfig = (): string => {
+const writeMcpConfig = (specName: string): string => {
   if (!existsSync(SIGNAL_DIR)) mkdirSync(SIGNAL_DIR, { recursive: true });
 
   const configPath = join(SIGNAL_DIR, "mcp.json");
@@ -53,7 +54,7 @@ const writeMcpConfig = (): string => {
       tailrec: {
         command: "node",
         args: [mcpBin],
-        env: { TAILREC_SIGNAL_PATH: SIGNAL_PATH },
+        env: { TAILREC_SIGNAL_PATH: SIGNAL_PATH, TAILREC_SPEC: specName },
       },
     },
   }));
@@ -145,7 +146,7 @@ const buildArgs = (opts: SessionOptions, sessionId: string | undefined): string[
   const args: string[] = [];
 
   // Inject MCP server for tailrec tools
-  const mcpConfig = writeMcpConfig();
+  const mcpConfig = writeMcpConfig(opts.specName ?? "default");
   args.push("--mcp-config", mcpConfig);
 
   // Inject plugin dir for slash commands (/t.plan, /t.start, etc.)

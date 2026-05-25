@@ -1,4 +1,4 @@
-// MCP tool: t.plan — create plan card structure
+// MCP tool: t.plan — create plan structure with linked task chain
 // Pure file writer — intelligence lives in the skill/LLM session, not here
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
@@ -17,13 +17,11 @@ interface PlanInput {
 
 // Accept either structured JSON or plain content string
 const parseInput = (content: string): PlanInput => {
-  // Try JSON first
   try {
     const parsed = JSON.parse(content);
     if (parsed.title) return parsed;
   } catch { /* not JSON, treat as plain text */ }
 
-  // Plain text: first line = title, rest = overview
   const lines = content.split("\n");
   const title = lines[0]!.trim();
   const overview = lines.slice(1).join("\n").trim();
@@ -43,7 +41,7 @@ export const handlePlan = async (args: { content: string }): Promise<string> => 
   mkdirSync(planDir, { recursive: true });
   mkdirSync(join(planDir, "tasks"), { recursive: true });
 
-  // plan.md — overview
+  // plan.md — overview (reference only, not used for routing)
   writeFileSync(join(planDir, "plan.md"), `---
 type: plan
 title: "${input.title}"
@@ -56,7 +54,7 @@ description: "${input.title}"
 ${input.overview ?? ""}
 `);
 
-  // design.md — shared constraints (populated by t.specify or inline)
+  // design.md — shared constraints (injected into every task session)
   const designContent = input.design
     ? input.design
     : `# Design Principles\n\n<!-- Populate via t.specify after codebase exploration -->`;
@@ -71,30 +69,22 @@ description: "Shared design constraints for ${input.title}"
 ${designContent}
 `);
 
-  // tasks.md + per-task cards
+  // Build linked task chain
   if (input.tasks && input.tasks.length > 0) {
-    const taskList = input.tasks.map((t) => `- [ ] ${t.title}`).join("\n");
-    writeFileSync(join(planDir, "tasks.md"), `---
-type: plan
-title: "${input.title} — Tasks"
-shared: false
-description: "Task breakdown for ${input.title}"
----
+    const slugs = input.tasks.map((t) => slugify(t.title));
 
-# Tasks
-
-${taskList}
-`);
-
-    // Per-task card with spec
-    for (const task of input.tasks) {
-      const taskSlug = slugify(task.title);
+    for (let i = 0; i < input.tasks.length; i++) {
+      const task = input.tasks[i]!;
+      const taskSlug = slugs[i]!;
+      const nextSlug = i < input.tasks.length - 1 ? slugs[i + 1]! : null;
       const taskDir = join(planDir, "tasks", taskSlug);
       mkdirSync(taskDir, { recursive: true });
+
       writeFileSync(join(taskDir, "task.md"), `---
-type: task
 title: "${task.title}"
-shared: false
+status: pending
+next: ${nextSlug ? `"${nextSlug}"` : "null"}${i === 0 ? "\nhead: true" : ""}
+type: task
 description: "Task: ${task.title} (plan: ${slug})"
 ---
 
@@ -104,21 +94,8 @@ ${task.spec}
 `);
     }
 
-    return `Created plan "${input.title}" with ${input.tasks.length} tasks at ${planDir}`;
+    return `Created plan "${input.title}" with ${input.tasks.length} tasks (linked chain) at ${planDir}`;
   }
 
-  // No tasks yet — skeleton
-  writeFileSync(join(planDir, "tasks.md"), `---
-type: plan
-title: "${input.title} — Tasks"
-shared: false
-description: "Task breakdown for ${input.title}"
----
-
-# Tasks
-
-<!-- Populate via t.adjust -->
-`);
-
-  return `Created plan scaffold "${input.title}" at ${planDir}\nUse t.specify for design, t.adjust for tasks.`;
+  return `Created plan scaffold "${input.title}" at ${planDir}\nUse t.adjust to define the task chain.`;
 };

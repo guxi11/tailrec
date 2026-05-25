@@ -1,87 +1,56 @@
-// MCP tool: t.start — begin executing tasks sequentially via tailrec loop
-// Writes signal to trigger reassemble with task context
+// MCP tool: t.start — begin executing tasks via tailrec loop
+// Finds current task in chain, persists active state, triggers restart
 
-import { readFileSync, writeFileSync, existsSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfig } from "../config/index.js";
-import { listPlans, parseTasks } from "./tasks.js";
+import { mergeDecisions, readDecisions } from "../state/index.js";
+import { listPlans, findCurrentTask, markDone } from "./tasks.js";
 
 export const handleStart = (args: { plan?: string }): string => {
   const config = loadConfig();
+  const specName = process.env["TAILREC_SPEC"] ?? "default";
   const plans = listPlans(config.cards_dir);
 
   if (plans.length === 0) return "No plans found. Use t.plan first.";
 
   const planSlug = args.plan ?? plans[0]!;
   const planDir = join(config.cards_dir, "plans", planSlug);
-  const tasksPath = join(planDir, "tasks.md");
+  const current = findCurrentTask(planDir);
 
-  if (!existsSync(tasksPath)) return `Plan "${planSlug}" not found.`;
+  if (!current) return `All tasks in "${planSlug}" are complete!`;
 
-  const tasks = parseTasks(readFileSync(tasksPath, "utf-8"));
-  const nextTask = tasks.find((t) => !t.completed);
+  // Guard: if already executing this exact task, tell LLM to use reassemble instead
+  const persisted = readDecisions(config.state_dir, specName);
+  if (persisted._active_plan === planSlug && persisted._active_task === current.slug) {
+    return `Task "${current.slug}" is already active. If you're done, call reassemble({ next_input: "done" }) to advance.`;
+  }
 
-  if (!nextTask) return `All tasks in "${planSlug}" are complete!`;
+  // Persist active plan/task — repl.ts reads this to build task query and auto-advance
+  mergeDecisions(config.state_dir, specName, {
+    _active_plan: planSlug,
+    _active_task: current.slug,
+  });
 
-  // Read design.md for shared principles (injected directly into task context)
-  const designPath = join(planDir, "design.md");
-  const designRaw = existsSync(designPath) ? readFileSync(designPath, "utf-8") : "";
-  // Strip frontmatter for inline inclusion
-  const designBody = designRaw.replace(/^---[\s\S]*?---\s*/, "").trim();
-
-  // Read task-specific spec (task.md) and handoff (input.md)
-  const taskSlug = nextTask.title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const taskDir = join(planDir, "tasks", taskSlug);
-  const taskMdPath = join(taskDir, "task.md");
-  const inputPath = join(taskDir, "input.md");
-
-  const taskSpecRaw = existsSync(taskMdPath) ? readFileSync(taskMdPath, "utf-8") : "";
-  const taskSpec = taskSpecRaw.replace(/^---[\s\S]*?---\s*/, "").trim();
-  const handoffRaw = existsSync(inputPath) ? readFileSync(inputPath, "utf-8") : "";
-  const handoff = handoffRaw.replace(/^---[\s\S]*?---\s*/, "").trim();
-
-  // Build the reassemble signal — the parent tailrec loop will pick this up
+  // Write restart signal
   const SIGNAL_PATH = process.env["TAILREC_SIGNAL_PATH"];
   if (!SIGNAL_PATH) {
     return `Error: TAILREC_SIGNAL_PATH not set. t.start must run inside a tailrec session.`;
   }
 
-  const query = [
-    `## Task: ${nextTask.title}`,
-    taskSpec ? `\n## Task Spec\n${taskSpec}` : "",
-    designBody ? `\n## Design Constraints\n${designBody}` : "",
-    handoff ? `\n## Handoff from previous task\n${handoff}` : "",
-    `\n## Instructions`,
-    `Complete the task above. Before finishing:`,
-    `1. Save important decisions/tips for the next task`,
-    `2. Call reassemble with next_input set to the next task title`,
-  ].filter(Boolean).join("\n");
-
-  const contextHints = [
-    `plan: ${planSlug}`,
-    `task: ${nextTask.title}`,
-  ].filter(Boolean);
-
   writeFileSync(SIGNAL_PATH, JSON.stringify({
-    action: "restart",
-    query,
-    contextHints,
-    decisions: { _active_plan: planSlug, _active_task: nextTask.title },
+    action: "start_task",
+    query: current.title,
+    decisions: { _active_plan: planSlug, _active_task: current.slug },
   }));
 
-  // Kill parent to trigger restart loop
   setTimeout(() => process.kill(process.ppid!, "SIGTERM"), 100);
-
-  return `Starting task: ${nextTask.title}\nReassembling with task context...`;
+  return `Starting task: ${current.title}\nReassembling with task context...`;
 };
 
-// Mark current task as done and advance (called by reassemble with task completion)
-export const markTaskDone = (planSlug: string, taskTitle: string): void => {
+// Mark current task as done (called by repl.ts after signal)
+export const markTaskDone = (planSlug: string, taskSlug: string): void => {
   const config = loadConfig();
-  const tasksPath = join(config.cards_dir, "plans", planSlug, "tasks.md");
-  if (!existsSync(tasksPath)) return;
-
-  const content = readFileSync(tasksPath, "utf-8");
-  const updated = content.replace(`- [ ] ${taskTitle}`, `- [x] ${taskTitle}`);
-  writeFileSync(tasksPath, updated);
+  const taskMdPath = join(config.cards_dir, "plans", planSlug, "tasks", taskSlug, "task.md");
+  markDone(taskMdPath);
 };

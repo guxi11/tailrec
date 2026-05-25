@@ -9,20 +9,26 @@ export interface AssembledPrompt {
 
 const TOOLS_SECTION = `# Tailrec Tools
 
-You have access to the following MCP tools from the "tailrec" server. Use them when appropriate:
-
 | Tool | When to use |
 |------|-------------|
-| reassemble | Context is stale or pivoting to a different domain — clears context and reloads with fresh cards |
-| t.plan | User wants to break a large feature into tracked tasks — creates plan.md, design.md, tasks.md |
-| t.resume | Show available plans or restore task queue for a specific plan |
-| t.specify | Add constraints/specifications to a plan's design.md |
-| t.adjust | Reorder, split, merge, or remove tasks in a plan |
-| t.tasks | Show current task list with completion status |
-| t.start | Begin the next incomplete task (triggers reassemble with task context) |
-| t.archive | Archive a completed plan, extract design into ground truth cards |
+| reassemble | Signal task completion — clears context and advances to next task |
+| t.plan | Break work into tracked tasks (creates structured plan cards) |
+| t.tasks | Show task list with completion status |
+| t.start | Begin executing tasks |`;
 
-When the user types a command like "t.plan", "t.tasks", etc., call the corresponding MCP tool.`;
+// When a plan task is active, this HARD constraint is prepended
+const TASK_BOUNDARY = `# ⚠️ SINGLE-TASK SESSION — HARD CONSTRAINT
+
+You are in a tailrec managed session. You are assigned EXACTLY ONE task (shown below in "Current Task").
+
+**RULES:**
+1. Implement ONLY the task described in "Current Task". Nothing else.
+2. Do NOT look ahead to other tasks. Do NOT implement features beyond this task's scope.
+3. When you have completed this ONE task, you MUST call the \`reassemble\` MCP tool immediately.
+4. Pass a 1-sentence summary of what you did as \`next_input\`. Example: \`reassemble({ next_input: "Added Feedback types and enums" })\`
+5. The system handles task advancement automatically — do NOT try to start the next task yourself.
+
+**If you implement more than the assigned task, your work beyond scope will be discarded.**`;
 
 export const buildPrompt = (args: {
   sharedCards: Card[];
@@ -33,7 +39,17 @@ export const buildPrompt = (args: {
 }): AssembledPrompt => {
   const { sharedCards, selectedCards, decisions, specName, initialTask } = args;
 
-  const sections: string[] = [TOOLS_SECTION];
+  // Detect if we're in plan-task execution mode
+  const isTaskExecution = Boolean(decisions._active_plan && decisions._active_task);
+
+  const sections: string[] = [];
+
+  // Hard constraint goes FIRST if in task execution mode
+  if (isTaskExecution) {
+    sections.push(TASK_BOUNDARY);
+  }
+
+  sections.push(TOOLS_SECTION);
 
   // Layer 1: Shared cards (always included)
   if (sharedCards.length > 0) {
@@ -51,17 +67,24 @@ export const buildPrompt = (args: {
     );
   }
 
-  // Layer 3: Persisted decisions
-  const hasDecisions = Object.keys(decisions).length > 0;
-  if (hasDecisions) {
+  // Layer 3: Persisted decisions (filter internal keys from display)
+  const visibleDecisions = Object.fromEntries(
+    Object.entries(decisions).filter(([k]) => !k.startsWith("_")),
+  );
+  if (Object.keys(visibleDecisions).length > 0) {
     sections.push(
-      `# Decisions${specName ? ` (${specName})` : ""}\n\`\`\`json\n${JSON.stringify(decisions, null, 2)}\n\`\`\``,
+      `# Decisions${specName ? ` (${specName})` : ""}\n\`\`\`json\n${JSON.stringify(visibleDecisions, null, 2)}\n\`\`\``,
     );
   }
 
-  // Layer 4: Initial task / user message
+  // Layer 4: Current task
   if (initialTask) {
     sections.push(`# Current Task\n${initialTask}`);
+  }
+
+  // Closing reminder (recency bias — LLMs attend more to end of context)
+  if (isTaskExecution) {
+    sections.push(`# Reminder\nWhen this task is complete, call \`reassemble\` immediately. Do not continue to other work.`);
   }
 
   return { appendix: sections.join("\n\n---\n") };

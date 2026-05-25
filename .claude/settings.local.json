@@ -36,7 +36,10 @@
       "Bash(python3 *)",
       "Bash(npm list *)",
       "Bash(pip show *)",
-      "Bash(pip3 show *)"
+      "Bash(pip3 show *)",
+      "Bash(mkdir -p /Users/zyy/develop/Guxi11/ImplBench/datasets/user-feedback-analytics/src-tailrec/src/app/api/feedback/\\\\[id\\\\])",
+      "Bash(mkdir -p /Users/zyy/develop/Guxi11/ImplBench/datasets/user-feedback-analytics/src-tailrec/src/app/api/users/\\\\[id\\\\]/feedback)",
+      "Bash(mkdir -p /Users/zyy/develop/Guxi11/ImplBench/datasets/user-feedback-analytics/src-tailrec/src/app/feedback/\\\\[id\\\\])"
     ]
   }
 }

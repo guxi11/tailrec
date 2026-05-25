@@ -3,7 +3,7 @@
 import { createInterface } from "node:readline";
 import { writeFileSync } from "node:fs";
 import { loadConfig } from "./config/index.js";
-import { mergeDecisions } from "./state/index.js";
+import { mergeDecisions, readDecisions } from "./state/index.js";
 import { handlePlan } from "./mcp/plan.js";
 import { handleTasks } from "./mcp/tasks.js";
 import { handleResume } from "./mcp/resume.js";
@@ -14,6 +14,7 @@ import { handleArchive } from "./mcp/archive.js";
 
 const config = loadConfig();
 const SIGNAL_PATH = process.env.TAILREC_SIGNAL_PATH!;
+const SPEC_NAME = process.env.TAILREC_SPEC ?? "default";
 
 const send = (msg: Record<string, unknown>) => {
   process.stdout.write(JSON.stringify(msg) + "\n");
@@ -103,14 +104,23 @@ const TOOLS = [
 
 const handleReassemble = (args: { next_input: string; decisions?: Record<string, unknown>; context_hints?: string[] }) => {
   if (args.decisions) {
-    mergeDecisions(config.state_dir, "default", args.decisions);
+    mergeDecisions(config.state_dir, SPEC_NAME, args.decisions);
   }
+
+  // Auto-inject active plan/task from persisted state so repl.ts can markTaskDone
+  // even if the LLM doesn't explicitly pass them
+  const persisted = readDecisions(config.state_dir, SPEC_NAME);
+  const signalDecisions = {
+    ...args.decisions,
+    _active_plan: persisted._active_plan,
+    _active_task: persisted._active_task,
+  };
 
   writeFileSync(SIGNAL_PATH, JSON.stringify({
     action: "restart",
     query: args.next_input,
     contextHints: args.context_hints,
-    decisions: args.decisions,
+    decisions: signalDecisions,
   }));
 
   setTimeout(() => process.kill(process.ppid!, "SIGTERM"), 100);

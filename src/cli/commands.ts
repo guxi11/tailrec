@@ -83,6 +83,7 @@ export const createProgram = (): Command => {
         { next_input: task },
         config,
         opts.spec,
+        backend,
       );
 
       const { exitCode, sessionId } = await spawnTransparent({

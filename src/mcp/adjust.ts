@@ -1,52 +1,54 @@
-// MCP tool: t.adjust — modify task breakdown in tasks.md + generate per-task cards
-// Accepts either checkbox-format text or structured JSON with per-task specs
+// MCP tool: t.adjust — rewrite the task chain
+// Accepts JSON array of {title, spec} and links them as a chain via frontmatter `next`
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "node:fs";
+import { writeFileSync, existsSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { loadConfig } from "../config/index.js";
-import { listPlans, parseTasks } from "./tasks.js";
+import { listPlans } from "./tasks.js";
 
 const slugify = (title: string): string =>
   title.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
 
-interface StructuredTask {
+interface TaskInput {
   title: string;
   spec?: string;
 }
 
-// Try parsing as JSON array of {title, spec}
-const tryParseStructured = (content: string): StructuredTask[] | null => {
+// Try JSON, fall back to line-per-task
+const parseTaskInputs = (content: string): TaskInput[] => {
   try {
     const parsed = JSON.parse(content);
-    if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].title) {
-      return parsed;
-    }
+    if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].title) return parsed;
   } catch { /* not JSON */ }
-  return null;
+
+  // Plain text: one task title per line (- prefix optional)
+  return content.split("\n")
+    .map((l) => l.replace(/^[-*]\s*(\[[ x]\]\s*)?/, "").trim())
+    .filter(Boolean)
+    .map((title) => ({ title }));
 };
 
-const writeTaskCard = (planDir: string, planSlug: string, title: string, spec: string): void => {
-  const taskSlug = slugify(title);
-  const taskDir = join(planDir, "tasks", taskSlug);
+const writeTaskCard = (
+  taskDir: string,
+  _slug: string,
+  planSlug: string,
+  task: TaskInput,
+  nextSlug: string | null,
+  isHead: boolean,
+): void => {
   mkdirSync(taskDir, { recursive: true });
   writeFileSync(join(taskDir, "task.md"), `---
+title: "${task.title}"
+status: pending
+next: ${nextSlug ? `"${nextSlug}"` : "null"}${isHead ? "\nhead: true" : ""}
 type: task
-title: "${title}"
-shared: false
-description: "Task: ${title} (plan: ${planSlug})"
+description: "Task: ${task.title} (plan: ${planSlug})"
 ---
 
-# ${title}
+# ${task.title}
 
-${spec}
+${task.spec ?? ""}
 `);
-};
-
-const ensureTaskCard = (planDir: string, planSlug: string, title: string): void => {
-  const taskSlug = slugify(title);
-  const taskMdPath = join(planDir, "tasks", taskSlug, "task.md");
-  if (existsSync(taskMdPath)) return;
-  writeTaskCard(planDir, planSlug, title, "<!-- Spec filled during execution -->");
 };
 
 export const handleAdjust = (args: { plan?: string; content: string }): string => {
@@ -57,39 +59,22 @@ export const handleAdjust = (args: { plan?: string; content: string }): string =
 
   const planSlug = args.plan ?? plans[0]!;
   const planDir = join(config.cards_dir, "plans", planSlug);
-  const tasksPath = join(planDir, "tasks.md");
+  const tasksDir = join(planDir, "tasks");
 
-  if (!existsSync(tasksPath)) return `Plan "${planSlug}" not found.`;
+  if (!existsSync(planDir)) return `Plan "${planSlug}" not found.`;
+  mkdirSync(tasksDir, { recursive: true });
 
-  // Try structured JSON format first
-  const structured = tryParseStructured(args.content);
+  const tasks = parseTaskInputs(args.content);
+  if (tasks.length === 0) return "No tasks provided.";
 
-  if (structured) {
-    // Structured: write tasks.md from titles + create rich task cards
-    const taskList = structured.map((t) => `- [ ] ${t.title}`).join("\n");
-    const existing = readFileSync(tasksPath, "utf-8");
-    const headerIdx = existing.indexOf("# Tasks");
-    const prefix = headerIdx !== -1 ? existing.slice(0, headerIdx + "# Tasks".length) : existing;
-    writeFileSync(tasksPath, `${prefix}\n\n${taskList}\n`);
+  // Build linked chain: each points to the next
+  const slugs = tasks.map((t) => slugify(t.title));
 
-    for (const task of structured) {
-      writeTaskCard(planDir, planSlug, task.title, task.spec ?? "");
-    }
-
-    return `Updated tasks for "${planSlug}" (${structured.length} tasks with specs).`;
+  for (let i = 0; i < tasks.length; i++) {
+    const nextSlug = i < tasks.length - 1 ? slugs[i + 1]! : null;
+    const taskDir = join(tasksDir, slugs[i]!);
+    writeTaskCard(taskDir, slugs[i]!, planSlug, tasks[i]!, nextSlug, i === 0);
   }
 
-  // Plain checkbox format
-  const existing = readFileSync(tasksPath, "utf-8");
-  const headerIdx = existing.indexOf("# Tasks");
-  const prefix = headerIdx !== -1 ? existing.slice(0, headerIdx + "# Tasks".length) : existing;
-  const updated = `${prefix}\n\n${args.content}\n`;
-  writeFileSync(tasksPath, updated);
-
-  const tasks = parseTasks(updated);
-  for (const task of tasks) {
-    ensureTaskCard(planDir, planSlug, task.title);
-  }
-
-  return `Updated tasks for "${planSlug}" (${tasks.length} tasks, card dirs created).`;
+  return `Created task chain for "${planSlug}" (${tasks.length} tasks linked).`;
 };

@@ -14,13 +14,13 @@ export interface ReassembleInput {
 
 export interface ReassembleResult {
   prompt: AssembledPrompt;
-  collectorUsage: { input_tokens: number; output_tokens: number };
 }
 
 export const reassemble = async (
   input: ReassembleInput,
   config: TailrecConfig,
   specName: string,
+  backend: string,
 ): Promise<ReassembleResult> => {
   // 1. Persist decisions
   if (input.decisions) {
@@ -29,8 +29,17 @@ export const reassemble = async (
 
   // 2. Load cards
   const allCards = loadWorkspace(config.cards_dir);
-  const shared = sharedCards(allCards);
-  const task = taskCards(allCards);
+  const decisions = readDecisions(config.state_dir, specName);
+  const activePlan = decisions._active_plan as string | undefined;
+
+  // When executing a plan task, exclude tasks.md (full task list) to prevent
+  // the LLM from seeing all tasks and working beyond its assigned scope
+  const filtered = activePlan
+    ? allCards.filter((c) => !c.relativePath.match(/plans\/[^/]+\/tasks\.md$/))
+    : allCards;
+
+  const shared = sharedCards(filtered);
+  const task = taskCards(filtered);
 
   // 3. Run collector to select relevant task cards
   const collectorResult = await collect({
@@ -38,6 +47,7 @@ export const reassemble = async (
     contextHints: input.context_hints,
     cards: task,
     model: config.collector_model,
+    backend,
   });
 
   // 4. Resolve selected cards
@@ -46,7 +56,6 @@ export const reassemble = async (
     .filter((c): c is NonNullable<typeof c> => c != null);
 
   // 5. Assemble appendix
-  const decisions = readDecisions(config.state_dir, specName);
   const prompt = buildPrompt({
     sharedCards: shared,
     selectedCards,
@@ -55,5 +64,5 @@ export const reassemble = async (
     initialTask: input.next_input,
   });
 
-  return { prompt, collectorUsage: collectorResult.usage };
+  return { prompt };
 };
